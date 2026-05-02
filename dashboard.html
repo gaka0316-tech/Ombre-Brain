@@ -299,6 +299,42 @@
     box-shadow: inset 3px 3px 6px var(--shadow-dark-subtle), inset -3px -3px 6px var(--shadow-light);
   }
 
+  .detail-actions {
+    display: flex; gap: 8px; margin: 16px 0 8px; padding-top: 12px; border-top: 1px solid var(--border);
+  }
+  .detail-actions button {
+    flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); font-size: 13px; cursor: pointer;
+  }
+  .detail-actions button:hover { background: var(--accent-glow); }
+  .detail-actions .btn-delete { color: var(--negative); border-color: var(--negative); }
+  .detail-actions .btn-delete:hover { background: rgba(139,74,74,0.1); }
+
+  .edit-modal {
+    display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.4); z-index: 1100; align-items: center; justify-content: center;
+  }
+  .edit-modal.open { display: flex; }
+  .edit-modal-body {
+    background: var(--bg); border-radius: 16px; padding: 24px;
+    width: 90%; max-width: 520px; max-height: 85vh; overflow-y: auto;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+  }
+  .edit-modal-body h3 { font-family: 'Cormorant Garamond', serif; font-size: 20px; margin-bottom: 16px; }
+  .edit-field { margin-bottom: 12px; }
+  .edit-field label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 4px; }
+  .edit-field input, .edit-field textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface); color: var(--text); font-size: 13px; font-family: inherit;
+  }
+  .edit-field textarea { min-height: 120px; resize: vertical; line-height: 1.6; }
+  .edit-row { display: flex; gap: 10px; }
+  .edit-row .edit-field { flex: 1; }
+  .edit-btns { display: flex; gap: 8px; margin-top: 16px; }
+  .edit-btns button { flex: 1; padding: 10px; border-radius: 8px; border: none; font-size: 13px; cursor: pointer; }
+  .edit-btns .btn-save { background: var(--accent); color: #fff; }
+  .edit-btns .btn-cancel { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
+
   .config-section {
     margin-bottom: 28px;
     padding: 24px;
@@ -780,6 +816,44 @@
   <div id="detail-content"></div>
 </div>
 
+<!-- Edit Modal -->
+<div class="edit-modal" id="edit-modal">
+  <div class="edit-modal-body">
+    <h3>✏️ 编辑记忆</h3>
+    <input type="hidden" id="edit-id">
+    <div class="edit-field">
+      <label>名称</label>
+      <input type="text" id="edit-name">
+    </div>
+    <div class="edit-field">
+      <label>内容</label>
+      <textarea id="edit-content"></textarea>
+    </div>
+    <div class="edit-field">
+      <label>标签（逗号分隔）</label>
+      <input type="text" id="edit-tags">
+    </div>
+    <div class="edit-row">
+      <div class="edit-field">
+        <label>重要度 (1-10)</label>
+        <input type="number" id="edit-importance" min="1" max="10">
+      </div>
+      <div class="edit-field">
+        <label>效价 V (0-1)</label>
+        <input type="number" id="edit-valence" min="0" max="1" step="0.05">
+      </div>
+      <div class="edit-field">
+        <label>唤醒度 A (0-1)</label>
+        <input type="number" id="edit-arousal" min="0" max="1" step="0.05">
+      </div>
+    </div>
+    <div class="edit-btns">
+      <button class="btn-cancel" onclick="closeEdit()">取消</button>
+      <button class="btn-save" onclick="saveBucket()">保存</button>
+    </div>
+  </div>
+</div>
+
 <!-- Settings Tab View -->
 <div class="content" id="settings-view" style="display:none">
   <div style="max-width:580px;margin:0 auto;">
@@ -1195,9 +1269,72 @@ async function showDetail(id) {
         '<div class="field"><label>创建</label>' + (meta.created || '—') + '</div>' +
         '<div class="field"><label>最后活跃</label>' + (meta.last_active || '—') + '</div>' +
       '</div>' +
-      '<div class="detail-content">' + esc(b.content) + '</div>';
+      '<div class="detail-content">' + esc(b.content) + '</div>' +
+      '<div class="detail-actions">' +
+        '<button onclick="openEdit(\'' + id + '\')">✏️ 编辑</button>' +
+        '<button class="btn-delete" onclick="deleteBucket(\'' + id + '\')">🗑 删除</button>' +
+      '</div>';
   } catch (e) {
     content.innerHTML = '<div class="loading">加载失败: ' + e.message + '</div>';
+  }
+}
+
+async function openEdit(id) {
+  try {
+    var res = await fetch(BASE + '/api/bucket/' + id);
+    var b = await res.json();
+    var meta = b.metadata || {};
+    document.getElementById('edit-id').value = id;
+    document.getElementById('edit-name').value = meta.name || '';
+    document.getElementById('edit-content').value = b.content || '';
+    document.getElementById('edit-tags').value = (meta.tags || []).join(', ');
+    document.getElementById('edit-importance').value = meta.importance || 5;
+    document.getElementById('edit-valence').value = meta.valence != null ? meta.valence : 0.5;
+    document.getElementById('edit-arousal').value = meta.arousal != null ? meta.arousal : 0.3;
+    document.getElementById('edit-modal').classList.add('open');
+  } catch (e) {
+    alert('加载失败: ' + e.message);
+  }
+}
+
+function closeEdit() {
+  document.getElementById('edit-modal').classList.remove('open');
+}
+
+async function saveBucket() {
+  var id = document.getElementById('edit-id').value;
+  var body = {
+    name: document.getElementById('edit-name').value,
+    content: document.getElementById('edit-content').value,
+    tags: document.getElementById('edit-tags').value,
+    importance: parseInt(document.getElementById('edit-importance').value) || 5,
+    valence: parseFloat(document.getElementById('edit-valence').value),
+    arousal: parseFloat(document.getElementById('edit-arousal').value),
+  };
+  try {
+    var res = await fetch(BASE + '/api/bucket/' + id, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error('保存失败 (' + res.status + ')');
+    closeEdit();
+    closeDetail();
+    loadBuckets();
+  } catch (e) {
+    alert('保存失败: ' + e.message);
+  }
+}
+
+async function deleteBucket(id) {
+  if (!confirm('确定要删除这条记忆吗？此操作不可撤销。')) return;
+  try {
+    var res = await fetch(BASE + '/api/bucket/' + id, { method: 'DELETE' });
+    if (!res.ok) throw new Error('删除失败 (' + res.status + ')');
+    closeDetail();
+    loadBuckets();
+  } catch (e) {
+    alert('删除失败: ' + e.message);
   }
 }
 
