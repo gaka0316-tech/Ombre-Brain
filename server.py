@@ -1318,6 +1318,83 @@ async def api_bucket_detail(request):
     })
 
 
+@mcp.custom_route("/api/bucket/{bucket_id}", methods=["PUT"])
+async def api_bucket_update(request):
+    """Update bucket content and/or metadata via web dashboard."""
+    from starlette.responses import JSONResponse
+    err = _require_auth(request)
+    if err: return err
+    bucket_id = request.path_params["bucket_id"]
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "invalid JSON"}, status_code=400)
+
+    updates = {}
+    if "content" in body and body["content"]:
+        updates["content"] = body["content"]
+    if "name" in body and body["name"]:
+        updates["name"] = body["name"]
+    if "tags" in body:
+        if isinstance(body["tags"], str):
+            updates["tags"] = [t.strip() for t in body["tags"].split(",") if t.strip()]
+        elif isinstance(body["tags"], list):
+            updates["tags"] = body["tags"]
+    if "importance" in body:
+        try:
+            updates["importance"] = max(1, min(10, int(body["importance"])))
+        except (ValueError, TypeError):
+            pass
+    if "valence" in body:
+        try:
+            updates["valence"] = max(0.0, min(1.0, float(body["valence"])))
+        except (ValueError, TypeError):
+            pass
+    if "arousal" in body:
+        try:
+            updates["arousal"] = max(0.0, min(1.0, float(body["arousal"])))
+        except (ValueError, TypeError):
+            pass
+    if "resolved" in body:
+        updates["resolved"] = bool(body["resolved"])
+    if "pinned" in body:
+        updates["pinned"] = bool(body["pinned"])
+        if body["pinned"]:
+            updates["importance"] = 10
+    if "digested" in body:
+        updates["digested"] = bool(body["digested"])
+
+    if not updates:
+        return JSONResponse({"error": "no fields to update"}, status_code=400)
+
+    success = await bucket_mgr.update(bucket_id, **updates)
+    if not success:
+        return JSONResponse({"error": "bucket not found or update failed"}, status_code=404)
+
+    # Re-generate embedding if content changed
+    if "content" in updates:
+        try:
+            await embedding_engine.generate_and_store(bucket_id, updates["content"])
+        except Exception:
+            pass
+
+    return JSONResponse({"ok": True, "updated": list(updates.keys())})
+
+
+@mcp.custom_route("/api/bucket/{bucket_id}", methods=["DELETE"])
+async def api_bucket_delete(request):
+    """Delete a bucket via web dashboard."""
+    from starlette.responses import JSONResponse
+    err = _require_auth(request)
+    if err: return err
+    bucket_id = request.path_params["bucket_id"]
+    success = await bucket_mgr.delete(bucket_id)
+    if success:
+        embedding_engine.delete_embedding(bucket_id)
+        return JSONResponse({"ok": True})
+    return JSONResponse({"error": "bucket not found"}, status_code=404)
+
+
 @mcp.custom_route("/api/search", methods=["GET"])
 async def api_search(request):
     """Search buckets by query."""
