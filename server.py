@@ -1318,6 +1318,62 @@ async def api_bucket_detail(request):
     })
 
 
+@mcp.custom_route("/api/buckets", methods=["POST"])
+async def api_bucket_create(request):
+    """Create a new bucket via web dashboard."""
+    from starlette.responses import JSONResponse
+    err = _require_auth(request)
+    if err: return err
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "invalid JSON"}, status_code=400)
+
+    content = body.get("content", "").strip()
+    if not content:
+        return JSONResponse({"error": "content is required"}, status_code=400)
+
+    name = body.get("name", "").strip() or None
+    tags = []
+    if "tags" in body:
+        if isinstance(body["tags"], str):
+            tags = [t.strip() for t in body["tags"].split(",") if t.strip()]
+        elif isinstance(body["tags"], list):
+            tags = body["tags"]
+    try:
+        importance = max(1, min(10, int(body.get("importance", 5))))
+    except (ValueError, TypeError):
+        importance = 5
+    try:
+        valence = max(0.0, min(1.0, float(body.get("valence", 0.5))))
+    except (ValueError, TypeError):
+        valence = 0.5
+    try:
+        arousal = max(0.0, min(1.0, float(body.get("arousal", 0.3))))
+    except (ValueError, TypeError):
+        arousal = 0.3
+    pinned = bool(body.get("pinned", False))
+    bucket_type = "permanent" if pinned else "dynamic"
+
+    bucket_id = await bucket_mgr.create(
+        content=content,
+        tags=tags,
+        importance=importance,
+        domain=["未分类"],
+        valence=valence,
+        arousal=arousal,
+        name=name,
+        bucket_type=bucket_type,
+        pinned=pinned,
+    )
+    try:
+        await embedding_engine.generate_and_store(bucket_id, content)
+    except Exception:
+        pass
+
+    return JSONResponse({"ok": True, "id": bucket_id})
+
+
 @mcp.custom_route("/api/bucket/{bucket_id}", methods=["PUT"])
 async def api_bucket_update(request):
     """Update bucket content and/or metadata via web dashboard."""
