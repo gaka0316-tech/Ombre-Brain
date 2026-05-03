@@ -861,6 +861,7 @@
 <div class="edit-modal" id="create-modal">
   <div class="edit-modal-body">
     <h3>＋ 新增记忆</h3>
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">域、标签、效价、唤醒度支持自动分析，留空即可</div>
     <div class="edit-field">
       <label>名称</label>
       <input type="text" id="create-name" placeholder="记忆名称">
@@ -879,12 +880,12 @@
         <input type="number" id="create-importance" min="1" max="10" value="5">
       </div>
       <div class="edit-field">
-        <label>效价 V (0-1)</label>
-        <input type="number" id="create-valence" min="0" max="1" step="0.05" value="0.5">
+        <label>效价 V (留空=自动)</label>
+        <input type="number" id="create-valence" min="0" max="1" step="0.05" placeholder="自动">
       </div>
       <div class="edit-field">
-        <label>唤醒度 A (0-1)</label>
-        <input type="number" id="create-arousal" min="0" max="1" step="0.05" value="0.3">
+        <label>唤醒度 A (留空=自动)</label>
+        <input type="number" id="create-arousal" min="0" max="1" step="0.05" placeholder="自动">
       </div>
     </div>
     <div class="edit-btns">
@@ -1387,8 +1388,8 @@ function openCreate() {
   document.getElementById('create-content').value = '';
   document.getElementById('create-tags').value = '';
   document.getElementById('create-importance').value = 5;
-  document.getElementById('create-valence').value = 0.5;
-  document.getElementById('create-arousal').value = 0.3;
+  document.getElementById('create-valence').value = '';
+  document.getElementById('create-arousal').value = '';
   document.getElementById('create-modal').classList.add('open');
 }
 
@@ -1404,8 +1405,8 @@ async function createBucket() {
     content: content,
     tags: document.getElementById('create-tags').value,
     importance: parseInt(document.getElementById('create-importance').value) || 5,
-    valence: parseFloat(document.getElementById('create-valence').value) || 0.5,
-    arousal: parseFloat(document.getElementById('create-arousal').value) || 0.3,
+    valence: document.getElementById('create-valence').value !== '' ? parseFloat(document.getElementById('create-valence').value) : -1,
+    arousal: document.getElementById('create-arousal').value !== '' ? parseFloat(document.getElementById('create-arousal').value) : -1,
   };
   try {
     var res = await fetch(BASE + '/api/buckets', {
