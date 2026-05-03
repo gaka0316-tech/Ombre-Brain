@@ -1334,32 +1334,53 @@ async def api_bucket_create(request):
         return JSONResponse({"error": "content is required"}, status_code=400)
 
     name = body.get("name", "").strip() or None
-    tags = []
+    pinned = bool(body.get("pinned", False))
+    bucket_type = "permanent" if pinned else "dynamic"
+
+    # --- Auto-tagging via DeepSeek (same as hold tool) ---
+    try:
+        analysis = await dehydrator.analyze(content)
+    except Exception:
+        analysis = {
+            "domain": ["未分类"], "valence": 0.5, "arousal": 0.3,
+            "tags": [], "suggested_name": "",
+        }
+
+    # User-supplied values override auto-tagging results
+    domain = analysis.get("domain", ["未分类"])
+    auto_tags = analysis.get("tags", [])
+
+    user_tags = []
     if "tags" in body:
         if isinstance(body["tags"], str):
-            tags = [t.strip() for t in body["tags"].split(",") if t.strip()]
+            user_tags = [t.strip() for t in body["tags"].split(",") if t.strip()]
         elif isinstance(body["tags"], list):
-            tags = body["tags"]
+            user_tags = body["tags"]
+    all_tags = list(dict.fromkeys(auto_tags + user_tags))
+
+    if not name:
+        name = analysis.get("suggested_name", None)
+
     try:
         importance = max(1, min(10, int(body.get("importance", 5))))
     except (ValueError, TypeError):
         importance = 5
     try:
-        valence = max(0.0, min(1.0, float(body.get("valence", 0.5))))
+        user_valence = float(body.get("valence", -1))
+        valence = user_valence if 0 <= user_valence <= 1 else analysis.get("valence", 0.5)
     except (ValueError, TypeError):
-        valence = 0.5
+        valence = analysis.get("valence", 0.5)
     try:
-        arousal = max(0.0, min(1.0, float(body.get("arousal", 0.3))))
+        user_arousal = float(body.get("arousal", -1))
+        arousal = user_arousal if 0 <= user_arousal <= 1 else analysis.get("arousal", 0.3)
     except (ValueError, TypeError):
-        arousal = 0.3
-    pinned = bool(body.get("pinned", False))
-    bucket_type = "permanent" if pinned else "dynamic"
+        arousal = analysis.get("arousal", 0.3)
 
     bucket_id = await bucket_mgr.create(
         content=content,
-        tags=tags,
+        tags=all_tags,
         importance=importance,
-        domain=["未分类"],
+        domain=domain,
         valence=valence,
         arousal=arousal,
         name=name,
