@@ -1517,6 +1517,43 @@ async def api_bucket_delete(request):
     return JSONResponse({"error": "bucket not found"}, status_code=404)
 
 
+@mcp.custom_route("/api/buckets/batch", methods=["POST"])
+async def api_bucket_batch(request):
+    """Batch operations: delete or resolve multiple buckets."""
+    from starlette.responses import JSONResponse
+    err = _require_auth(request)
+    if err: return err
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "invalid JSON"}, status_code=400)
+    action = body.get("action", "")
+    ids = body.get("ids", [])
+    if not ids or not isinstance(ids, list):
+        return JSONResponse({"error": "ids array required"}, status_code=400)
+
+    results = {"success": 0, "failed": 0}
+    for bid in ids:
+        try:
+            if action == "delete":
+                ok = await bucket_mgr.delete(bid)
+                if ok:
+                    embedding_engine.delete_embedding(bid)
+                    results["success"] += 1
+                else:
+                    results["failed"] += 1
+            elif action == "resolve":
+                ok = await bucket_mgr.update(bid, resolved=True)
+                results["success"] += 1 if ok else 0
+                results["failed"] += 0 if ok else 1
+            else:
+                results["failed"] += 1
+        except Exception:
+            results["failed"] += 1
+
+    return JSONResponse({"ok": True, "action": action, **results})
+
+
 @mcp.custom_route("/api/backup", methods=["GET"])
 async def api_backup(request):
     """Download all buckets as a tar.gz backup file."""
