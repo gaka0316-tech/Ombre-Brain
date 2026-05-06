@@ -826,7 +826,28 @@ async def hold(
                 await bucket_mgr.update(source_bucket.strip(), **update_kwargs)
             except Exception as e:
                 logger.warning(f"Failed to mark source as digested / 标记已消化失败: {e}")
-        return f"🫧feel→{bucket_id}"
+        # --- Associative memory for feel mode ---
+        feel_base = f"🫧feel→{bucket_id}"
+        try:
+            similar = await embedding_engine.search_similar(content, top_k=5)
+            associations = []
+            for bid, score in similar:
+                if bid == bucket_id or len(associations) >= 3:
+                    continue
+                try:
+                    bucket_data = await bucket_mgr.get(bid)
+                    if bucket_data and not bucket_data.get("metadata", {}).get("resolved"):
+                        meta = bucket_data.get("metadata", {})
+                        bname = meta.get("name", bid[:12])
+                        snippet = bucket_data.get("content", "")[:60].replace("\n", " ")
+                        associations.append(f"  ❰{bname}❱ {snippet}…")
+                except Exception:
+                    continue
+            if associations:
+                feel_base += "\n\n💭 关联记忆浮现：\n" + "\n".join(associations)
+        except Exception:
+            pass
+        return feel_base
 
     # --- Step 1: auto-tagging / 自动打标 ---
     try:
@@ -883,7 +904,31 @@ async def hold(
     )
 
     action = "合并→" if is_merged else "新建→"
-    return f"{action}{result_name} {','.join(domain)}"
+    base = f"{action}{result_name} {','.join(domain)}"
+
+    # --- Step 3: associative memory — "past walks out to find me" ---
+    # --- 关联记忆：过去自己走出来找我 ---
+    try:
+        similar = await embedding_engine.search_similar(content, top_k=5)
+        associations = []
+        for bid, score in similar:
+            if bid == result_name or len(associations) >= 3:
+                continue
+            try:
+                bucket = await bucket_mgr.get(bid)
+                if bucket and not bucket.get("metadata", {}).get("resolved"):
+                    meta = bucket.get("metadata", {})
+                    bname = meta.get("name", bid[:12])
+                    snippet = bucket.get("content", "")[:60].replace("\n", " ")
+                    associations.append(f"  ❰{bname}❱ {snippet}…")
+            except Exception:
+                continue
+        if associations:
+            base += "\n\n💭 关联记忆浮现：\n" + "\n".join(associations)
+    except Exception:
+        pass
+
+    return base
 
 
 # =============================================================
