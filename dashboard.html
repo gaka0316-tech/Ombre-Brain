@@ -906,6 +906,13 @@
     </div>
 
     <div class="config-section">
+      <h3>📦 备份记忆</h3>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">一键下载所有记忆文件（.tar.gz），建议每月备份一次</p>
+      <button id="backup-btn" onclick="downloadBackup()" style="padding:10px 20px;border-radius:10px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-size:13px;cursor:pointer;">📦 下载备份</button>
+      <span id="backup-status" style="margin-left:10px;font-size:12px;color:var(--text-dim);"></span>
+    </div>
+
+    <div class="config-section">
       <h3>修改密码</h3>
       <div id="settings-env-notice" style="display:none;font-size:12px;color:var(--warning);margin-bottom:10px;">
         ⚠ 当前使用环境变量 OMBRE_DASHBOARD_PASSWORD，请直接修改环境变量。
@@ -1081,6 +1088,36 @@ async function loadSettingsStatus() {
   }
   // Also refresh the host-vault input whenever the settings tab is loaded.
   loadHostVault();
+}
+
+async function downloadBackup() {
+  var btn = document.getElementById('backup-btn');
+  var status = document.getElementById('backup-status');
+  btn.textContent = '📦 打包中…';
+  btn.disabled = true;
+  status.textContent = '';
+  try {
+    var resp = await authFetch('/api/backup');
+    if (!resp || !resp.ok) throw new Error('下载失败 (' + (resp ? resp.status : 'no response') + ')');
+    var blob = await resp.blob();
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    var disp = resp.headers.get('content-disposition') || '';
+    var match = disp.match(/filename="?([^"]+)"?/);
+    a.download = match ? match[1] : 'ombre_backup.tar.gz';
+    a.href = url;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    status.textContent = '✅ 已下载';
+    status.style.color = 'var(--positive)';
+  } catch (e) {
+    status.textContent = '❌ ' + e.message;
+    status.style.color = 'var(--negative)';
+  }
+  btn.textContent = '📦 下载备份';
+  btn.disabled = false;
 }
 
 async function loadHostVault() {
