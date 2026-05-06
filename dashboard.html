@@ -335,6 +335,23 @@
   .edit-btns .btn-save { background: var(--accent); color: #fff; }
   .edit-btns .btn-cancel { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
 
+  .timeline-month { margin-bottom: 24px; }
+  .timeline-month h3 { font-family: 'Cormorant Garamond', serif; font-size: 18px; margin: 0 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); color: var(--accent); }
+  .timeline-item { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(0,0,0,0.04); cursor: pointer; }
+  .timeline-item:hover { background: var(--accent-glow); border-radius: 8px; }
+  .timeline-date { min-width: 50px; font-size: 12px; color: var(--text-dim); padding-top: 2px; }
+  .timeline-icon { font-size: 14px; }
+  .timeline-body { flex: 1; }
+  .timeline-name { font-size: 13px; font-weight: 600; }
+  .timeline-preview { font-size: 12px; color: var(--text-dim); margin-top: 2px; line-height: 1.4; }
+
+  .batch-bar { display: none; gap: 8px; align-items: center; padding: 10px 14px; margin-bottom: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+  .batch-bar.active { display: flex; }
+  .batch-bar span { font-size: 12px; color: var(--text-dim); }
+  .batch-bar button { padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 12px; cursor: pointer; }
+  .batch-bar .btn-batch-delete { color: var(--negative); border-color: var(--negative); }
+  .batch-check { width: 16px; height: 16px; margin-right: 4px; cursor: pointer; accent-color: var(--accent); }
+
   .config-section {
     margin-bottom: 28px;
     padding: 24px;
@@ -648,6 +665,7 @@
 
 <div class="tabs">
   <div class="tab active" data-tab="list">记忆桶</div>
+  <div class="tab" data-tab="timeline">时间线</div>
   <div class="tab" data-tab="breath">Breath 模拟</div>
   <div class="tab" data-tab="network">记忆网络</div>
   <div class="tab" data-tab="config">配置</div>
@@ -658,9 +676,23 @@
 <div class="content" id="list-view">
   <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
     <div class="filters" id="filters" style="flex:1;margin-bottom:0;"></div>
+    <button onclick="toggleBatchMode()" id="batch-toggle" style="padding:8px 12px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12px;cursor:pointer;white-space:nowrap;">☑ 批量</button>
     <button onclick="openCreate()" style="padding:8px 16px;border-radius:20px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-size:13px;cursor:pointer;white-space:nowrap;">＋ 新增</button>
   </div>
+  <div class="batch-bar" id="batch-bar">
+    <span id="batch-count">已选 0 条</span>
+    <button onclick="batchSelectAll()">全选</button>
+    <button onclick="batchAction('resolve')">✓ 标记已解决</button>
+    <button class="btn-batch-delete" onclick="batchAction('delete')">🗑 批量删除</button>
+    <button onclick="toggleBatchMode()">取消</button>
+  </div>
   <div class="bucket-list" id="bucket-list">
+    <div class="loading">加载中…</div>
+  </div>
+</div>
+
+<div class="content" id="timeline-view" style="display:none">
+  <div id="timeline-content">
     <div class="loading">加载中…</div>
   </div>
 </div>
@@ -1195,11 +1227,13 @@ document.querySelectorAll('.tab').forEach(tab => {
     tab.classList.add('active');
     const target = tab.dataset.tab;
     document.getElementById('list-view').style.display = target === 'list' ? '' : 'none';
+    document.getElementById('timeline-view').style.display = target === 'timeline' ? '' : 'none';
     document.getElementById('breath-view').style.display = target === 'breath' ? '' : 'none';
     document.getElementById('network-view').style.display = target === 'network' ? '' : 'none';
     document.getElementById('config-view').style.display = target === 'config' ? '' : 'none';
     document.getElementById('import-view').style.display = target === 'import' ? '' : 'none';
     document.getElementById('settings-view').style.display = target === 'settings' ? '' : 'none';
+    if (target === 'timeline') renderTimeline();
     if (target === 'network') loadNetwork();
     if (target === 'config') loadConfig();
     if (target === 'import') { pollImportStatus(); loadImportResults(); }
@@ -1296,7 +1330,9 @@ function renderBuckets(buckets) {
     var vPos = Math.round(b.valence * 100);
     var modelV = b.model_valence != null ? ' → V' + b.model_valence.toFixed(1) : '';
     var timeAgo = formatTimeAgo(b.last_active || b.created);
+    var checkbox = batchMode ? '<input type="checkbox" class="batch-check" data-id="' + b.id + '" onclick="event.stopPropagation();updateBatchCount()">' : '';
     return '<div class="bucket-row" onclick="showDetail(\'' + b.id + '\')">' +
+      checkbox +
       '<span class="icon">' + icon + '</span>' +
       '<span class="name" title="' + esc(b.name) + '">' + esc(b.name) + '</span>' +
       '<span class="domain">' + (b.domain || []).join(', ') + '</span>' +
@@ -1306,6 +1342,92 @@ function renderBuckets(buckets) {
       '<span class="preview">' + esc(b.content_preview) + '</span>' +
     '</div>';
   }).join('');
+}
+
+var batchMode = false;
+function toggleBatchMode() {
+  batchMode = !batchMode;
+  var btn = document.getElementById('batch-toggle');
+  var bar = document.getElementById('batch-bar');
+  btn.textContent = batchMode ? '✕ 退出批量' : '☑ 批量';
+  if (batchMode) { bar.classList.add('active'); } else { bar.classList.remove('active'); }
+  renderBuckets(allBuckets);
+}
+
+function updateBatchCount() {
+  var checked = document.querySelectorAll('.batch-check:checked');
+  document.getElementById('batch-count').textContent = '已选 ' + checked.length + ' 条';
+}
+
+function batchSelectAll() {
+  var boxes = document.querySelectorAll('.batch-check');
+  var allChecked = Array.from(boxes).every(function(b) { return b.checked; });
+  boxes.forEach(function(b) { b.checked = !allChecked; });
+  updateBatchCount();
+}
+
+async function batchAction(action) {
+  var checked = document.querySelectorAll('.batch-check:checked');
+  if (!checked.length) { alert('请先勾选记忆'); return; }
+  var ids = Array.from(checked).map(function(b) { return b.dataset.id; });
+  var msg = action === 'delete' ? '确定删除 ' + ids.length + ' 条记忆？此操作不可撤销。' : '确定标记 ' + ids.length + ' 条记忆为已解决？';
+  if (!confirm(msg)) return;
+  try {
+    var res = await fetch(BASE + '/api/buckets/batch', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ action: action, ids: ids })
+    });
+    if (!res.ok) throw new Error('操作失败');
+    var data = await res.json();
+    alert('成功 ' + data.success + ' 条' + (data.failed ? '，失败 ' + data.failed + ' 条' : ''));
+    batchMode = false;
+    document.getElementById('batch-bar').classList.remove('active');
+    document.getElementById('batch-toggle').textContent = '☑ 批量';
+    loadBuckets();
+  } catch (e) {
+    alert('操作失败: ' + e.message);
+  }
+}
+
+function renderTimeline() {
+  var el = document.getElementById('timeline-content');
+  if (!allBuckets.length) {
+    el.innerHTML = '<div class="loading">没有记忆</div>';
+    return;
+  }
+  var sorted = allBuckets.slice().sort(function(a, b) {
+    return (b.created || '').localeCompare(a.created || '');
+  });
+  var months = {};
+  sorted.forEach(function(b) {
+    var d = b.created ? b.created.substring(0, 7) : '未知';
+    if (!months[d]) months[d] = [];
+    months[d].push(b);
+  });
+  var html = '';
+  Object.keys(months).sort().reverse().forEach(function(m) {
+    var label = m;
+    try {
+      var parts = m.split('-');
+      label = parts[0] + '年' + parseInt(parts[1]) + '月';
+    } catch(e) {}
+    html += '<div class="timeline-month"><h3>' + label + ' (' + months[m].length + ')</h3>';
+    months[m].forEach(function(b) {
+      var icon = b.pinned ? '📌' : b.type === 'feel' ? '🫧' : b.digested ? '🌿' : b.resolved ? '💤' : '💭';
+      var day = b.created ? b.created.substring(8, 10) + '日' : '';
+      html += '<div class="timeline-item" onclick="showDetail(\'' + b.id + '\')">' +
+        '<div class="timeline-date">' + day + '</div>' +
+        '<div class="timeline-icon">' + icon + '</div>' +
+        '<div class="timeline-body">' +
+          '<div class="timeline-name">' + esc(b.name) + '</div>' +
+          '<div class="timeline-preview">' + esc(b.content_preview) + '</div>' +
+        '</div>' +
+      '</div>';
+    });
+    html += '</div>';
+  });
+  el.innerHTML = html;
 }
 
 async function searchBuckets(query) {
