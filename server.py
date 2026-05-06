@@ -1517,6 +1517,31 @@ async def api_bucket_delete(request):
     return JSONResponse({"error": "bucket not found"}, status_code=404)
 
 
+@mcp.custom_route("/api/backup", methods=["GET"])
+async def api_backup(request):
+    """Download all buckets as a tar.gz backup file."""
+    from starlette.responses import Response
+    err = _require_auth(request)
+    if err: return err
+    import tarfile, io, time
+    buf = io.BytesIO()
+    buckets_dir = config.get("buckets_dir", "")
+    if not buckets_dir or not os.path.isdir(buckets_dir):
+        from starlette.responses import JSONResponse
+        return JSONResponse({"error": "buckets directory not found"}, status_code=500)
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        tar.add(buckets_dir, arcname="buckets")
+    buf.seek(0)
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    return Response(
+        content=buf.read(),
+        media_type="application/gzip",
+        headers={
+            "Content-Disposition": f'attachment; filename="ombre_backup_{timestamp}.tar.gz"'
+        },
+    )
+
+
 @mcp.custom_route("/api/search", methods=["GET"])
 async def api_search(request):
     """Search buckets by query."""
