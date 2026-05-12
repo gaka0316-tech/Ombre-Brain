@@ -868,6 +868,10 @@
       <label>标签（逗号分隔）</label>
       <input type="text" id="edit-tags">
     </div>
+    <div class="edit-field">
+      <label>域（逗号分隔）</label>
+      <input type="text" id="edit-domain" placeholder="如：恋爱, 内心, 数字">
+    </div>
     <div class="edit-row">
       <div class="edit-field">
         <label>重要度 (1-10)</label>
@@ -905,6 +909,10 @@
     <div class="edit-field">
       <label>标签（逗号分隔）</label>
       <input type="text" id="create-tags" placeholder="标签1, 标签2">
+    </div>
+    <div class="edit-field">
+      <label>域（逗号分隔，留空=自动）</label>
+      <input type="text" id="create-domain" placeholder="如：恋爱, 内心, 数字">
     </div>
     <div class="edit-row">
       <div class="edit-field">
@@ -1488,6 +1496,7 @@ async function openEdit(id) {
     document.getElementById('edit-name').value = meta.name || '';
     document.getElementById('edit-content').value = b.content || '';
     document.getElementById('edit-tags').value = (meta.tags || []).join(', ');
+    document.getElementById('edit-domain').value = (meta.domain || []).join(', ');
     document.getElementById('edit-importance').value = meta.importance || 5;
     document.getElementById('edit-valence').value = meta.valence != null ? meta.valence : 0.5;
     document.getElementById('edit-arousal').value = meta.arousal != null ? meta.arousal : 0.3;
@@ -1507,6 +1516,7 @@ async function saveBucket() {
     name: document.getElementById('edit-name').value,
     content: document.getElementById('edit-content').value,
     tags: document.getElementById('edit-tags').value,
+    domain: document.getElementById('edit-domain').value,
     importance: parseInt(document.getElementById('edit-importance').value) || 5,
     valence: parseFloat(document.getElementById('edit-valence').value),
     arousal: parseFloat(document.getElementById('edit-arousal').value),
@@ -1546,6 +1556,7 @@ function openCreate() {
   document.getElementById('create-name').value = '';
   document.getElementById('create-content').value = '';
   document.getElementById('create-tags').value = '';
+  document.getElementById('create-domain').value = '';
   document.getElementById('create-importance').value = 5;
   document.getElementById('create-valence').value = '';
   document.getElementById('create-arousal').value = '';
@@ -1563,6 +1574,7 @@ async function createBucket() {
     name: document.getElementById('create-name').value.trim(),
     content: content,
     tags: document.getElementById('create-tags').value,
+    domain: document.getElementById('create-domain').value,
     importance: parseInt(document.getElementById('create-importance').value) || 5,
     valence: document.getElementById('create-valence').value !== '' ? parseFloat(document.getElementById('create-valence').value) : -1,
     arousal: document.getElementById('create-arousal').value !== '' ? parseFloat(document.getElementById('create-arousal').value) : -1,
