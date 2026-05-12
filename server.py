@@ -1393,6 +1393,14 @@ async def api_bucket_create(request):
 
     # User-supplied values override auto-tagging results
     domain = analysis.get("domain", ["未分类"])
+    if "domain" in body:
+        user_domain = []
+        if isinstance(body["domain"], str) and body["domain"].strip():
+            user_domain = [d.strip() for d in body["domain"].split(",") if d.strip()]
+        elif isinstance(body["domain"], list):
+            user_domain = body["domain"]
+        if user_domain:
+            domain = user_domain
     auto_tags = analysis.get("tags", [])
 
     user_tags = []
@@ -1462,6 +1470,11 @@ async def api_bucket_update(request):
             updates["tags"] = [t.strip() for t in body["tags"].split(",") if t.strip()]
         elif isinstance(body["tags"], list):
             updates["tags"] = body["tags"]
+    if "domain" in body:
+        if isinstance(body["domain"], str):
+            updates["domain"] = [d.strip() for d in body["domain"].split(",") if d.strip()]
+        elif isinstance(body["domain"], list):
+            updates["domain"] = body["domain"]
     if "importance" in body:
         try:
             updates["importance"] = max(1, min(10, int(body["importance"])))
