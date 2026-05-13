@@ -426,6 +426,8 @@ async def _merge_or_create(
     valence: float,
     arousal: float,
     name: str = "",
+    source: str = "",
+    event_type: str = "",
 ) -> tuple[str, bool]:
     """
     Check if a similar bucket exists for merging; merge if so, create if not.
@@ -476,6 +478,8 @@ async def _merge_or_create(
         valence=valence,
         arousal=arousal,
         name=name or None,
+        source=source,
+        event_type=event_type,
     )
     # --- Generate embedding for new bucket ---
     try:
@@ -499,12 +503,13 @@ async def breath(
     query: str = "",
     max_tokens: int = 10000,
     domain: str = "",
+    event_type: str = "",
     valence: float = -1,
     arousal: float = -1,
     max_results: int = 20,
     importance_min: int = -1,
 ) -> str:
-    """检索/浮现记忆。不传query或传空=自动浮现,有query=关键词检索。max_tokens控制返回总token上限(默认10000)。domain逗号分隔,valence/arousal 0~1(-1忽略)。max_results控制返回数量上限(默认20,最大50)。importance_min>=1时按重要度批量拉取(不走语义搜索,按importance降序返回最多20条)。"""
+    """检索/浮现记忆。不传query或传空=自动浮现,有query=关键词检索。max_tokens控制返回总token上限(默认10000)。domain逗号分隔,event_type按事件类型过滤(如:情感/技术/里程碑),valence/arousal 0~1(-1忽略)。max_results控制返回数量上限(默认20,最大50)。importance_min>=1时按重要度批量拉取(不走语义搜索,按importance降序返回最多20条)。"""
     await decay_engine.ensure_started()
     max_results = min(max_results, 50)
     max_tokens = min(max_tokens, 20000)
@@ -521,6 +526,8 @@ async def breath(
             if int(b["metadata"].get("importance", 0)) >= importance_min
             and b["metadata"].get("type") not in ("feel",)
         ]
+        if event_type and event_type.strip():
+            filtered = [b for b in filtered if b.get("metadata", {}).get("event_type", "") == event_type.strip()]
         filtered.sort(key=lambda b: int(b["metadata"].get("importance", 0)), reverse=True)
         filtered = filtered[:20]
         if not filtered:
@@ -713,6 +720,12 @@ async def breath(
     except Exception as e:
         logger.warning(f"Vector search failed, using keyword only / 向量搜索失败: {e}")
 
+    # --- Event type filter: narrow results by event_type ---
+    # --- 事件类型过滤：按 event_type 缩小结果 ---
+    if event_type and event_type.strip():
+        et = event_type.strip()
+        matches = [b for b in matches if b.get("metadata", {}).get("event_type", "") == et]
+
     results = []
     token_used = 0
     for bucket in matches:
@@ -785,8 +798,9 @@ async def hold(
     feel: bool = False,
     source_bucket: str = "",    valence: float = -1,
     arousal: float = -1,
+    source: str = "",
 ) -> str:
-    """存储单条记忆,自动打标+合并。tags逗号分隔,importance 1-10。pinned=True创建永久钉选桶。feel=True存储你的第一人称感受(不参与普通浮现)。source_bucket=被消化的记忆桶ID(feel模式下,标记源记忆为已消化)。"""
+    """存储单条记忆,自动打标+合并。tags逗号分隔,importance 1-10。pinned=True创建永久钉选桶。feel=True存储你的第一人称感受(不参与普通浮现)。source_bucket=被消化的记忆桶ID(feel模式下,标记源记忆为已消化)。source=记忆来源(如框名、日期,用于证据溯源)。"""
     await decay_engine.ensure_started()
 
     # --- Input validation / 输入校验 ---
@@ -811,6 +825,8 @@ async def hold(
             arousal=feel_arousal,
             name=None,
             bucket_type="feel",
+            source=source,
+            event_type="情感",
         )
         try:
             await embedding_engine.generate_and_store(bucket_id, content)
@@ -864,6 +880,7 @@ async def hold(
     auto_arousal = analysis["arousal"]
     auto_tags = analysis["tags"]
     suggested_name = analysis.get("suggested_name", "")
+    event_type = analysis.get("event_type", "其他")
 
     # --- User-supplied valence/arousal takes priority over analyze() result ---
     # --- 用户显式传入的 valence/arousal 优先，analyze() 结果作为 fallback ---
@@ -885,6 +902,8 @@ async def hold(
             name=suggested_name or None,
             bucket_type="permanent",
             pinned=True,
+            source=source,
+            event_type=event_type,
         )
         try:
             await embedding_engine.generate_and_store(bucket_id, content)
@@ -901,6 +920,8 @@ async def hold(
         valence=final_valence,
         arousal=final_arousal,
         name=suggested_name,
+        source=source,
+        event_type=event_type,
     )
 
     action = "合并→" if is_merged else "新建→"
@@ -1429,6 +1450,12 @@ async def api_bucket_create(request):
     except (ValueError, TypeError):
         arousal = analysis.get("arousal", 0.3)
 
+    # User-supplied event_type and source
+    event_type = analysis.get("event_type", "其他")
+    if body.get("event_type", "").strip():
+        event_type = body["event_type"].strip()
+    source_val = body.get("source", "").strip()
+
     bucket_id = await bucket_mgr.create(
         content=content,
         tags=all_tags,
@@ -1439,6 +1466,8 @@ async def api_bucket_create(request):
         name=name,
         bucket_type=bucket_type,
         pinned=pinned,
+        source=source_val,
+        event_type=event_type,
     )
     try:
         await embedding_engine.generate_and_store(bucket_id, content)
@@ -1492,6 +1521,10 @@ async def api_bucket_update(request):
             pass
     if "resolved" in body:
         updates["resolved"] = bool(body["resolved"])
+    if "source" in body:
+        updates["source"] = str(body["source"]).strip()
+    if "event_type" in body:
+        updates["event_type"] = str(body["event_type"]).strip()
     if "pinned" in body:
         updates["pinned"] = bool(body["pinned"])
         if body["pinned"]:
