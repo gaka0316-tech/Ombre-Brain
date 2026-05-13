@@ -110,6 +110,8 @@ class BucketManager:
         name: str = None,
         pinned: bool = False,
         protected: bool = False,
+        source: str = "",
+        event_type: str = "",
     ) -> str:
         """
         Create a new memory bucket, return bucket ID.
@@ -148,6 +150,10 @@ class BucketManager:
             "last_active": now_iso(),
             "activation_count": 0,
         }
+        if source:
+            metadata["source"] = source
+        if event_type:
+            metadata["event_type"] = event_type
         if pinned:
             metadata["pinned"] = True
         if protected:
