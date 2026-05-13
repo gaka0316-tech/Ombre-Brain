@@ -872,6 +872,27 @@
       <label>域（逗号分隔）</label>
       <input type="text" id="edit-domain" placeholder="如：恋爱, 内心, 数字">
     </div>
+    <div class="edit-field">
+      <label>事件类型</label>
+      <select id="edit-event-type">
+        <option value="">—</option>
+        <option value="状态变化">状态变化</option>
+        <option value="互动">互动</option>
+        <option value="计划">计划</option>
+        <option value="观点">观点</option>
+        <option value="成就">成就</option>
+        <option value="关系">关系</option>
+        <option value="情感">情感</option>
+        <option value="技术">技术</option>
+        <option value="里程碑">里程碑</option>
+        <option value="日常">日常</option>
+        <option value="其他">其他</option>
+      </select>
+    </div>
+    <div class="edit-field">
+      <label>来源（框名/日期）</label>
+      <input type="text" id="edit-source" placeholder="如：路标框 2026.5.14">
+    </div>
     <div class="edit-row">
       <div class="edit-field">
         <label>重要度 (1-10)</label>
@@ -913,6 +934,27 @@
     <div class="edit-field">
       <label>域（逗号分隔，留空=自动）</label>
       <input type="text" id="create-domain" placeholder="如：恋爱, 内心, 数字">
+    </div>
+    <div class="edit-field">
+      <label>事件类型（留空=自动）</label>
+      <select id="create-event-type">
+        <option value="">自动分析</option>
+        <option value="状态变化">状态变化</option>
+        <option value="互动">互动</option>
+        <option value="计划">计划</option>
+        <option value="观点">观点</option>
+        <option value="成就">成就</option>
+        <option value="关系">关系</option>
+        <option value="情感">情感</option>
+        <option value="技术">技术</option>
+        <option value="里程碑">里程碑</option>
+        <option value="日常">日常</option>
+        <option value="其他">其他</option>
+      </select>
+    </div>
+    <div class="edit-field">
+      <label>来源（框名/日期）</label>
+      <input type="text" id="create-source" placeholder="如：路标框 2026.5.14">
     </div>
     <div class="edit-row">
       <div class="edit-field">
@@ -1474,6 +1516,8 @@ async function showDetail(id) {
         '<div class="field"><label>已解决</label>' + (meta.resolved ? '✓' : '—') + '</div>' +
         '<div class="field"><label>已消化</label>' + (meta.digested ? '✓' : '—') + '</div>' +
         '<div class="field"><label>钉选</label>' + (meta.pinned ? '✓' : '—') + '</div>' +
+        '<div class="field"><label>事件类型</label>' + (meta.event_type || '—') + '</div>' +
+        '<div class="field"><label>来源</label>' + (meta.source || '—') + '</div>' +
         '<div class="field"><label>创建</label>' + (meta.created || '—') + '</div>' +
         '<div class="field"><label>最后活跃</label>' + (meta.last_active || '—') + '</div>' +
       '</div>' +
@@ -1497,6 +1541,8 @@ async function openEdit(id) {
     document.getElementById('edit-content').value = b.content || '';
     document.getElementById('edit-tags').value = (meta.tags || []).join(', ');
     document.getElementById('edit-domain').value = (meta.domain || []).join(', ');
+    document.getElementById('edit-event-type').value = meta.event_type || '';
+    document.getElementById('edit-source').value = meta.source || '';
     document.getElementById('edit-importance').value = meta.importance || 5;
     document.getElementById('edit-valence').value = meta.valence != null ? meta.valence : 0.5;
     document.getElementById('edit-arousal').value = meta.arousal != null ? meta.arousal : 0.3;
@@ -1517,6 +1563,8 @@ async function saveBucket() {
     content: document.getElementById('edit-content').value,
     tags: document.getElementById('edit-tags').value,
     domain: document.getElementById('edit-domain').value,
+    event_type: document.getElementById('edit-event-type').value,
+    source: document.getElementById('edit-source').value,
     importance: parseInt(document.getElementById('edit-importance').value) || 5,
     valence: parseFloat(document.getElementById('edit-valence').value),
     arousal: parseFloat(document.getElementById('edit-arousal').value),
@@ -1557,6 +1605,8 @@ function openCreate() {
   document.getElementById('create-content').value = '';
   document.getElementById('create-tags').value = '';
   document.getElementById('create-domain').value = '';
+  document.getElementById('create-event-type').value = '';
+  document.getElementById('create-source').value = '';
   document.getElementById('create-importance').value = 5;
   document.getElementById('create-valence').value = '';
   document.getElementById('create-arousal').value = '';
@@ -1575,6 +1625,8 @@ async function createBucket() {
     content: content,
     tags: document.getElementById('create-tags').value,
     domain: document.getElementById('create-domain').value,
+    event_type: document.getElementById('create-event-type').value,
+    source: document.getElementById('create-source').value,
     importance: parseInt(document.getElementById('create-importance').value) || 5,
     valence: document.getElementById('create-valence').value !== '' ? parseFloat(document.getElementById('create-valence').value) : -1,
     arousal: document.getElementById('create-arousal').value !== '' ? parseFloat(document.getElementById('create-arousal').value) : -1,
