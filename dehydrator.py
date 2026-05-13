@@ -136,7 +136,19 @@ ANALYZE_PROMPT = """你是一个内容分析器。请分析以下文本，输出
    第二步—引申扩展：自动补充 8~10 个与当前场景语义相关的词，包括近义词、上位词、关联场景词、用户可能用不同措辞搜索的词
    两步合并为一个 tags 数组，总计 10~15 个
 5. suggested_name（建议桶名）：10字以内的简短标题
-6. 在 tags 和 suggested_name 中不要使用 [[]] 双链标记
+6. event_type（事件类型）：从以下选一个最匹配的
+   "状态变化" — 搬家、换工作、改名等
+   "互动" — 对话、聚餐、会议等
+   "计划" — 未来打算、待办安排
+   "观点" — 看法、态度、判断
+   "成就" — 完成目标、升职等
+   "关系" — 关系变化、新认识的人
+   "情感" — 心情、感受、情绪
+   "技术" — 编程、调试、搭建
+   "里程碑" — 重要节点、纪念日
+   "日常" — 普通日常记录
+   "其他" — 无法归入以上类别
+7. 在 tags 和 suggested_name 中不要使用 [[]] 双链标记
 
 输出格式（纯 JSON，无其他内容）：
 {
@@ -144,7 +156,8 @@ ANALYZE_PROMPT = """你是一个内容分析器。请分析以下文本，输出
   "valence": 0.7,
   "arousal": 0.4,
   "tags": ["核心词1", "核心词2", "扩展词1", "扩展词2", "..."],
-  "suggested_name": "简短标题"
+  "suggested_name": "简短标题",
+  "event_type": "情感"
 }"""
 
 
@@ -473,12 +486,17 @@ class Dehydrator:
         except (ValueError, TypeError):
             valence, arousal = 0.5, 0.3
 
+        valid_event_types = {"状态变化", "互动", "计划", "观点", "成就", "关系", "情感", "技术", "里程碑", "日常", "其他"}
+        raw_event_type = str(result.get("event_type", "其他"))
+        event_type = raw_event_type if raw_event_type in valid_event_types else "其他"
+
         return {
             "domain": result.get("domain", ["未分类"])[:3],
             "valence": valence,
             "arousal": arousal,
             "tags": result.get("tags", [])[:15],
             "suggested_name": str(result.get("suggested_name", ""))[:20],
+            "event_type": event_type,
         }
 
     # ---------------------------------------------------------
@@ -496,6 +514,7 @@ class Dehydrator:
             "arousal": 0.3,
             "tags": [],
             "suggested_name": "",
+            "event_type": "其他",
         }
 
     # ---------------------------------------------------------
