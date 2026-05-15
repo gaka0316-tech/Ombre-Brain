@@ -178,7 +178,7 @@ class Dehydrator:
         # --- Read dehydration API config / 读取脱水 API 配置 ---
         dehy_cfg = config.get("dehydration", {})
         self.api_key = dehy_cfg.get("api_key", "")
-        self.model = dehy_cfg.get("model", "deepseek-chat")
+        self.model = dehy_cfg.get("model", "deepseek/deepseek-v4-flash")
         self.base_url = dehy_cfg.get("base_url", "https://api.deepseek.com/v1")
         self.max_tokens = dehy_cfg.get("max_tokens", 1024)
         self.temperature = dehy_cfg.get("temperature", 0.1)
@@ -445,7 +445,7 @@ class Dehydrator:
                 {"role": "system", "content": ANALYZE_PROMPT},
                 {"role": "user", "content": content[:2000]},
             ],
-            max_tokens=256,
+            max_tokens=512,
             temperature=0.1,
         )
         if not response.choices:
