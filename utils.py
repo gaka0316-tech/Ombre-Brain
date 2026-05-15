@@ -34,8 +34,8 @@ def load_config(config_path: str = None) -> dict:
         "buckets_dir": os.path.join(os.path.dirname(os.path.abspath(__file__)), "buckets"),
         "merge_threshold": 75,
         "dehydration": {
-            "model": "deepseek-chat",
-            "base_url": "https://api.deepseek.com/v1",
+            "model": "deepseek/deepseek-v4-flash",
+            "base_url": "https://openrouter.ai/api/v1",
             "api_key": "",
             "max_tokens": 1024,
             "temperature": 0.1,
