@@ -1677,8 +1677,39 @@ async function loadNetwork() {
       archived: 'rgba(144,164,174,0.3)'
     };
 
+    // --- Brain shape: distribute nodes on two hemispheres ---
+    function brainPosition(index, total) {
+      var half = Math.floor(total / 2);
+      var isRight = index >= half;
+      var localIdx = isRight ? index - half : index;
+      var localTotal = isRight ? total - half : half;
+
+      // Golden angle distribution on hemisphere surface
+      var golden = Math.PI * (3 - Math.sqrt(5));
+      var theta = golden * localIdx;
+      var y = 1 - (localIdx / Math.max(1, localTotal - 1)) * 2; // -1 to 1
+      var radius = Math.sqrt(1 - y * y);
+
+      // Brain dimensions
+      var scaleX = 55, scaleY = 70, scaleZ = 50;
+      var px = radius * Math.cos(theta) * scaleX;
+      var py = y * scaleY;
+      var pz = radius * Math.sin(theta) * scaleZ;
+
+      // Split hemispheres: offset left/right
+      px = isRight ? Math.abs(px) + 8 : -Math.abs(px) - 8;
+
+      // Add slight noise for organic feel
+      px += (Math.random() - 0.5) * 10;
+      py += (Math.random() - 0.5) * 10;
+      pz += (Math.random() - 0.5) * 10;
+
+      return { x: px, y: py, z: pz };
+    }
+
     var graphData = {
-      nodes: networkData.nodes.map(function(n) {
+      nodes: networkData.nodes.map(function(n, i) {
+        var pos = brainPosition(i, networkData.nodes.length);
         return {
           id: n.id,
           name: n.name,
@@ -1687,7 +1718,8 @@ async function loadNetwork() {
           pinned: n.pinned,
           resolved: n.resolved,
           color: typeColors[n.type] || '#4fc3f7',
-          glow: typeGlow[n.type] || 'rgba(79,195,247,0.6)'
+          glow: typeGlow[n.type] || 'rgba(79,195,247,0.6)',
+          fx: pos.x, fy: pos.y, fz: pos.z
         };
       }),
       links: networkData.edges.map(function(e) {
@@ -1715,18 +1747,21 @@ async function loadNetwork() {
       .enableNavigationControls(true)
       .showNavInfo(false);
 
-    graph3d.d3Force('charge').strength(-30);
-    graph3d.d3Force('link').distance(function(l) { return 80 / (l.similarity || 0.5); });
+    graph3d.d3Force('charge', null);
+    graph3d.d3Force('link', null);
+    graph3d.d3Force('center', null);
 
-    // Auto-rotate
+    // Auto-rotate around brain
     var angle = 0;
+    graph3d.cameraPosition({ x: 0, y: 0, z: 250 });
     var rotateInterval = setInterval(function() {
       if (!graph3d) { clearInterval(rotateInterval); return; }
       graph3d.cameraPosition({
-        x: 300 * Math.sin(angle),
-        z: 300 * Math.cos(angle)
+        x: 250 * Math.sin(angle),
+        y: 30,
+        z: 250 * Math.cos(angle)
       });
-      angle += 0.002;
+      angle += 0.003;
     }, 30);
 
     // Stop auto-rotate on user interaction
