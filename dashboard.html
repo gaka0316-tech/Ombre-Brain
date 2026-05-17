@@ -1707,9 +1707,16 @@ async function loadNetwork() {
       return { x: px, y: py, z: pz };
     }
 
+    // Shuffle nodes so different types are mixed in the brain shape
+    var shuffledNodes = networkData.nodes.slice();
+    for (var si = shuffledNodes.length - 1; si > 0; si--) {
+      var sj = Math.floor(Math.random() * (si + 1));
+      var tmp = shuffledNodes[si]; shuffledNodes[si] = shuffledNodes[sj]; shuffledNodes[sj] = tmp;
+    }
+
     var graphData = {
-      nodes: networkData.nodes.map(function(n, i) {
-        var pos = brainPosition(i, networkData.nodes.length);
+      nodes: shuffledNodes.map(function(n, i) {
+        var pos = brainPosition(i, shuffledNodes.length);
         return {
           id: n.id,
           name: n.name,
@@ -1736,7 +1743,7 @@ async function loadNetwork() {
       .backgroundColor('#080820')
       .width(container.offsetWidth)
       .height(container.offsetHeight)
-      .nodeVal(function(n) { return Math.max(2, n.score * 0.5); })
+      .nodeVal(function(n) { return Math.max(0.5, Math.min(3, n.score * 0.1)); })
       .nodeColor(function(n) { return n.color; })
       .nodeOpacity(0.9)
       .nodeLabel(function(n) { return n.name; })
