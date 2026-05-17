@@ -1704,13 +1704,13 @@ async function loadNetwork() {
       var z = b * Math.sin(phi) * Math.sin(theta);
 
       // Wrinkle/sulci effect
-      var wrinkle = (Math.sin(theta * 7 + phi * 3) * 0.15 +
-                     Math.sin(theta * 13 + phi * 7) * 0.08 +
-                     Math.sin(theta * 3 - phi * 11) * 0.06);
+      var wrinkle = (Math.sin(theta * 7 + phi * 3) * 0.25 +
+                     Math.sin(theta * 13 + phi * 7) * 0.15 +
+                     Math.sin(theta * 3 - phi * 11) * 0.10);
       var r = Math.sqrt(x*x + y*y + z*z) || 1;
-      x += (x/r) * wrinkle * r * 0.12;
-      y += (y/r) * wrinkle * r * 0.08;
-      z += (z/r) * wrinkle * r * 0.12;
+      x += (x/r) * wrinkle * r * 0.15;
+      y += (y/r) * wrinkle * r * 0.10;
+      z += (z/r) * wrinkle * r * 0.15;
 
       // Longitudinal fissure
       var fissureDepth = Math.exp(-x * x * 0.008) * 12;
@@ -1725,7 +1725,7 @@ async function loadNetwork() {
     }
 
     // --- Background brain particles (surface) ---
-    var bgCount = 4000;
+    var bgCount = 8000;
     var bgPositions = new Float32Array(bgCount * 3);
     for (var i = 0; i < bgCount; i++) {
       var p = brainSurface(Math.random(), Math.random());
@@ -1761,6 +1761,24 @@ async function loadNetwork() {
       opacity: 0.12, color: 0x2266aa
     });
     scene.add(new THREE.Points(innerGeo, innerMat));
+
+    // --- Surface highlight layer (bright rim) ---
+    var hlCount = 1500;
+    var hlPos = new Float32Array(hlCount * 3);
+    for (var i = 0; i < hlCount; i++) {
+      var p = brainSurface(Math.random(), Math.random());
+      hlPos[i*3] = p.x * 1.02 + (Math.random()-0.5) * 2;
+      hlPos[i*3+1] = p.y * 1.02 + (Math.random()-0.5) * 2;
+      hlPos[i*3+2] = p.z * 1.02 + (Math.random()-0.5) * 2;
+    }
+    var hlGeo = new THREE.BufferGeometry();
+    hlGeo.setAttribute('position', new THREE.BufferAttribute(hlPos, 3));
+    var hlMat = new THREE.PointsMaterial({
+      map: texBrain, size: 4.5, transparent: true,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+      opacity: 0.2, color: 0x55bbee
+    });
+    scene.add(new THREE.Points(hlGeo, hlMat));
 
     // --- Memory nodes ---
     var typeTextures = { dynamic: texNode, permanent: texPerm, feel: texFeel, archived: texNode };
@@ -1799,7 +1817,7 @@ async function loadNetwork() {
       ));
       var lMat = new THREE.LineBasicMaterial({
         color: 0x3388ff, transparent: true,
-        opacity: Math.max(0.03, (e.similarity || 0.5) * 0.12),
+        opacity: Math.max(0.01, (e.similarity || 0.5) * 0.06),
         blending: THREE.AdditiveBlending
       });
       scene.add(new THREE.Line(lGeo, lMat));
