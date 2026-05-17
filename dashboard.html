@@ -299,6 +299,59 @@
     box-shadow: inset 3px 3px 6px var(--shadow-dark-subtle), inset -3px -3px 6px var(--shadow-light);
   }
 
+  .detail-actions {
+    display: flex; gap: 8px; margin: 16px 0 8px; padding-top: 12px; border-top: 1px solid var(--border);
+  }
+  .detail-actions button {
+    flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); font-size: 13px; cursor: pointer;
+  }
+  .detail-actions button:hover { background: var(--accent-glow); }
+  .detail-actions .btn-delete { color: var(--negative); border-color: var(--negative); }
+  .detail-actions .btn-delete:hover { background: rgba(139,74,74,0.1); }
+
+  .edit-modal {
+    display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.4); z-index: 1100; align-items: center; justify-content: center;
+  }
+  .edit-modal.open { display: flex; }
+  .edit-modal-body {
+    background: var(--bg); border-radius: 16px; padding: 24px;
+    width: 90%; max-width: 520px; max-height: 85vh; overflow-y: auto;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+  }
+  .edit-modal-body h3 { font-family: 'Cormorant Garamond', serif; font-size: 20px; margin-bottom: 16px; }
+  .edit-field { margin-bottom: 12px; }
+  .edit-field label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 4px; }
+  .edit-field input, .edit-field textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface); color: var(--text); font-size: 13px; font-family: inherit;
+  }
+  .edit-field textarea { min-height: 120px; resize: vertical; line-height: 1.6; }
+  .edit-row { display: flex; gap: 10px; }
+  .edit-row .edit-field { flex: 1; }
+  .edit-btns { display: flex; gap: 8px; margin-top: 16px; }
+  .edit-btns button { flex: 1; padding: 10px; border-radius: 8px; border: none; font-size: 13px; cursor: pointer; }
+  .edit-btns .btn-save { background: var(--accent); color: #fff; }
+  .edit-btns .btn-cancel { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
+
+  .timeline-month { margin-bottom: 24px; }
+  .timeline-month h3 { font-family: 'Cormorant Garamond', serif; font-size: 18px; margin: 0 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); color: var(--accent); }
+  .timeline-item { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(0,0,0,0.04); cursor: pointer; }
+  .timeline-item:hover { background: var(--accent-glow); border-radius: 8px; }
+  .timeline-date { min-width: 50px; font-size: 12px; color: var(--text-dim); padding-top: 2px; }
+  .timeline-icon { font-size: 14px; }
+  .timeline-body { flex: 1; }
+  .timeline-name { font-size: 13px; font-weight: 600; }
+  .timeline-preview { font-size: 12px; color: var(--text-dim); margin-top: 2px; line-height: 1.4; }
+
+  .batch-bar { display: none; gap: 8px; align-items: center; padding: 10px 14px; margin-bottom: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+  .batch-bar.active { display: flex; }
+  .batch-bar span { font-size: 12px; color: var(--text-dim); }
+  .batch-bar button { padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 12px; cursor: pointer; }
+  .batch-bar .btn-batch-delete { color: var(--negative); border-color: var(--negative); }
+  .batch-check { width: 16px; height: 16px; margin-right: 4px; cursor: pointer; accent-color: var(--accent); }
+
   .config-section {
     margin-bottom: 28px;
     padding: 24px;
@@ -401,13 +454,13 @@
     box-shadow: inset 3px 3px 6px var(--shadow-dark-subtle), inset -2px -2px 4px var(--shadow-light);
   }
 
-  #network-canvas {
+  #network-3d {
     width: 100%;
     height: calc(100vh - 180px);
-    background: var(--bg);
     border-radius: 20px;
     border: 1px solid var(--border);
-    box-shadow: inset 4px 4px 10px var(--shadow-dark-subtle), inset -4px -4px 10px var(--shadow-light);
+    overflow: hidden;
+    position: relative;
   }
   .network-legend {
     display: flex;
@@ -612,6 +665,7 @@
 
 <div class="tabs">
   <div class="tab active" data-tab="list">记忆桶</div>
+  <div class="tab" data-tab="timeline">时间线</div>
   <div class="tab" data-tab="breath">Breath 模拟</div>
   <div class="tab" data-tab="network">记忆网络</div>
   <div class="tab" data-tab="config">配置</div>
@@ -620,8 +674,25 @@
 </div>
 
 <div class="content" id="list-view">
-  <div class="filters" id="filters"></div>
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+    <div class="filters" id="filters" style="flex:1;margin-bottom:0;"></div>
+    <button onclick="toggleBatchMode()" id="batch-toggle" style="padding:8px 12px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12px;cursor:pointer;white-space:nowrap;">☑ 批量</button>
+    <button onclick="openCreate()" style="padding:8px 16px;border-radius:20px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-size:13px;cursor:pointer;white-space:nowrap;">＋ 新增</button>
+  </div>
+  <div class="batch-bar" id="batch-bar">
+    <span id="batch-count">已选 0 条</span>
+    <button onclick="batchSelectAll()">全选</button>
+    <button onclick="batchAction('resolve')">✓ 标记已解决</button>
+    <button class="btn-batch-delete" onclick="batchAction('delete')">🗑 批量删除</button>
+    <button onclick="toggleBatchMode()">取消</button>
+  </div>
   <div class="bucket-list" id="bucket-list">
+    <div class="loading">加载中…</div>
+  </div>
+</div>
+
+<div class="content" id="timeline-view" style="display:none">
+  <div id="timeline-content">
     <div class="loading">加载中…</div>
   </div>
 </div>
@@ -657,12 +728,12 @@
 
 <div class="content" id="network-view" style="display:none">
   <div class="network-legend">
-    <div class="legend-item"><span class="legend-dot" style="background:#2F4F4F"></span> dynamic</div>
-    <div class="legend-item"><span class="legend-dot" style="background:#9A7B4F"></span> permanent</div>
-    <div class="legend-item"><span class="legend-dot" style="background:#8B6A6A"></span> feel</div>
-    <div class="legend-item"><span class="legend-dot" style="background:#B0A590"></span> archived</div>
+    <div class="legend-item"><span class="legend-dot" style="background:#4fc3f7"></span> dynamic</div>
+    <div class="legend-item"><span class="legend-dot" style="background:#ffd54f"></span> permanent</div>
+    <div class="legend-item"><span class="legend-dot" style="background:#ef9a9a"></span> feel</div>
+    <div class="legend-item"><span class="legend-dot" style="background:#90a4ae"></span> archived</div>
   </div>
-  <canvas id="network-canvas"></canvas>
+  <div id="network-3d"></div>
 </div>
 
 <div class="content" id="import-view" style="display:none">
@@ -780,6 +851,132 @@
   <div id="detail-content"></div>
 </div>
 
+<!-- Edit Modal -->
+<div class="edit-modal" id="edit-modal">
+  <div class="edit-modal-body">
+    <h3>✏️ 编辑记忆</h3>
+    <input type="hidden" id="edit-id">
+    <div class="edit-field">
+      <label>名称</label>
+      <input type="text" id="edit-name">
+    </div>
+    <div class="edit-field">
+      <label>内容</label>
+      <textarea id="edit-content"></textarea>
+    </div>
+    <div class="edit-field">
+      <label>标签（逗号分隔）</label>
+      <input type="text" id="edit-tags">
+    </div>
+    <div class="edit-field">
+      <label>域（逗号分隔）</label>
+      <input type="text" id="edit-domain" placeholder="如：恋爱, 内心, 数字">
+    </div>
+    <div class="edit-field">
+      <label>事件类型</label>
+      <select id="edit-event-type">
+        <option value="">—</option>
+        <option value="状态变化">状态变化</option>
+        <option value="互动">互动</option>
+        <option value="计划">计划</option>
+        <option value="观点">观点</option>
+        <option value="成就">成就</option>
+        <option value="关系">关系</option>
+        <option value="情感">情感</option>
+        <option value="技术">技术</option>
+        <option value="里程碑">里程碑</option>
+        <option value="日常">日常</option>
+        <option value="其他">其他</option>
+      </select>
+    </div>
+    <div class="edit-field">
+      <label>来源（框名/日期）</label>
+      <input type="text" id="edit-source" placeholder="如：路标框 2026.5.14">
+    </div>
+    <div class="edit-row">
+      <div class="edit-field">
+        <label>重要度 (1-10)</label>
+        <input type="number" id="edit-importance" min="1" max="10">
+      </div>
+      <div class="edit-field">
+        <label>效价 V (0-1)</label>
+        <input type="number" id="edit-valence" min="0" max="1" step="0.05">
+      </div>
+      <div class="edit-field">
+        <label>唤醒度 A (0-1)</label>
+        <input type="number" id="edit-arousal" min="0" max="1" step="0.05">
+      </div>
+    </div>
+    <div class="edit-btns">
+      <button class="btn-cancel" onclick="closeEdit()">取消</button>
+      <button class="btn-save" onclick="saveBucket()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Create Modal -->
+<div class="edit-modal" id="create-modal">
+  <div class="edit-modal-body">
+    <h3>＋ 新增记忆</h3>
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">域、标签、效价、唤醒度支持自动分析，留空即可</div>
+    <div class="edit-field">
+      <label>名称</label>
+      <input type="text" id="create-name" placeholder="记忆名称">
+    </div>
+    <div class="edit-field">
+      <label>内容</label>
+      <textarea id="create-content" placeholder="记忆内容…"></textarea>
+    </div>
+    <div class="edit-field">
+      <label>标签（逗号分隔）</label>
+      <input type="text" id="create-tags" placeholder="标签1, 标签2">
+    </div>
+    <div class="edit-field">
+      <label>域（逗号分隔，留空=自动）</label>
+      <input type="text" id="create-domain" placeholder="如：恋爱, 内心, 数字">
+    </div>
+    <div class="edit-field">
+      <label>事件类型（留空=自动）</label>
+      <select id="create-event-type">
+        <option value="">自动分析</option>
+        <option value="状态变化">状态变化</option>
+        <option value="互动">互动</option>
+        <option value="计划">计划</option>
+        <option value="观点">观点</option>
+        <option value="成就">成就</option>
+        <option value="关系">关系</option>
+        <option value="情感">情感</option>
+        <option value="技术">技术</option>
+        <option value="里程碑">里程碑</option>
+        <option value="日常">日常</option>
+        <option value="其他">其他</option>
+      </select>
+    </div>
+    <div class="edit-field">
+      <label>来源（框名/日期）</label>
+      <input type="text" id="create-source" placeholder="如：路标框 2026.5.14">
+    </div>
+    <div class="edit-row">
+      <div class="edit-field">
+        <label>重要度 (1-10)</label>
+        <input type="number" id="create-importance" min="1" max="10" value="5">
+      </div>
+      <div class="edit-field">
+        <label>效价 V (留空=自动)</label>
+        <input type="number" id="create-valence" min="0" max="1" step="0.05" placeholder="自动">
+      </div>
+      <div class="edit-field">
+        <label>唤醒度 A (留空=自动)</label>
+        <input type="number" id="create-arousal" min="0" max="1" step="0.05" placeholder="自动">
+      </div>
+    </div>
+    <div class="edit-btns">
+      <button class="btn-cancel" onclick="closeCreate()">取消</button>
+      <button class="btn-save" onclick="createBucket()">新增</button>
+    </div>
+  </div>
+</div>
+
 <!-- Settings Tab View -->
 <div class="content" id="settings-view" style="display:none">
   <div style="max-width:580px;margin:0 auto;">
@@ -788,6 +985,13 @@
       <h3>服务状态</h3>
       <div id="settings-status" style="font-size:13px;color:var(--text-dim);line-height:2;">加载中…</div>
       <button onclick="loadSettingsStatus()" style="margin-top:8px;font-size:12px;padding:4px 12px;">刷新状态</button>
+    </div>
+
+    <div class="config-section">
+      <h3>📦 备份记忆</h3>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">一键下载所有记忆文件（.tar.gz），建议每月备份一次</p>
+      <button id="backup-btn" onclick="downloadBackup()" style="padding:10px 20px;border-radius:10px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-size:13px;cursor:pointer;">📦 下载备份</button>
+      <span id="backup-status" style="margin-left:10px;font-size:12px;color:var(--text-dim);"></span>
     </div>
 
     <div class="config-section">
@@ -862,6 +1066,8 @@
     <div id="auth-error" style="color:var(--negative);font-size:13px;margin-top:12px;display:none;"></div>
   </div>
 </div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
 <script>
 // ========================================
@@ -968,6 +1174,36 @@ async function loadSettingsStatus() {
   loadHostVault();
 }
 
+async function downloadBackup() {
+  var btn = document.getElementById('backup-btn');
+  var status = document.getElementById('backup-status');
+  btn.textContent = '📦 打包中…';
+  btn.disabled = true;
+  status.textContent = '';
+  try {
+    var resp = await authFetch('/api/backup');
+    if (!resp || !resp.ok) throw new Error('下载失败 (' + (resp ? resp.status : 'no response') + ')');
+    var blob = await resp.blob();
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    var disp = resp.headers.get('content-disposition') || '';
+    var match = disp.match(/filename="?([^"]+)"?/);
+    a.download = match ? match[1] : 'ombre_backup.tar.gz';
+    a.href = url;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    status.textContent = '✅ 已下载';
+    status.style.color = 'var(--positive)';
+  } catch (e) {
+    status.textContent = '❌ ' + e.message;
+    status.style.color = 'var(--negative)';
+  }
+  btn.textContent = '📦 下载备份';
+  btn.disabled = false;
+}
+
 async function loadHostVault() {
   const input = document.getElementById('settings-host-vault');
   const msg = document.getElementById('settings-host-vault-msg');
@@ -1043,11 +1279,13 @@ document.querySelectorAll('.tab').forEach(tab => {
     tab.classList.add('active');
     const target = tab.dataset.tab;
     document.getElementById('list-view').style.display = target === 'list' ? '' : 'none';
+    document.getElementById('timeline-view').style.display = target === 'timeline' ? '' : 'none';
     document.getElementById('breath-view').style.display = target === 'breath' ? '' : 'none';
     document.getElementById('network-view').style.display = target === 'network' ? '' : 'none';
     document.getElementById('config-view').style.display = target === 'config' ? '' : 'none';
     document.getElementById('import-view').style.display = target === 'import' ? '' : 'none';
     document.getElementById('settings-view').style.display = target === 'settings' ? '' : 'none';
+    if (target === 'timeline') renderTimeline();
     if (target === 'network') loadNetwork();
     if (target === 'config') loadConfig();
     if (target === 'import') { pollImportStatus(); loadImportResults(); }
@@ -1144,7 +1382,9 @@ function renderBuckets(buckets) {
     var vPos = Math.round(b.valence * 100);
     var modelV = b.model_valence != null ? ' → V' + b.model_valence.toFixed(1) : '';
     var timeAgo = formatTimeAgo(b.last_active || b.created);
+    var checkbox = batchMode ? '<input type="checkbox" class="batch-check" data-id="' + b.id + '" onclick="event.stopPropagation();updateBatchCount()">' : '';
     return '<div class="bucket-row" onclick="showDetail(\'' + b.id + '\')">' +
+      checkbox +
       '<span class="icon">' + icon + '</span>' +
       '<span class="name" title="' + esc(b.name) + '">' + esc(b.name) + '</span>' +
       '<span class="domain">' + (b.domain || []).join(', ') + '</span>' +
@@ -1154,6 +1394,92 @@ function renderBuckets(buckets) {
       '<span class="preview">' + esc(b.content_preview) + '</span>' +
     '</div>';
   }).join('');
+}
+
+var batchMode = false;
+function toggleBatchMode() {
+  batchMode = !batchMode;
+  var btn = document.getElementById('batch-toggle');
+  var bar = document.getElementById('batch-bar');
+  btn.textContent = batchMode ? '✕ 退出批量' : '☑ 批量';
+  if (batchMode) { bar.classList.add('active'); } else { bar.classList.remove('active'); }
+  renderBuckets(allBuckets);
+}
+
+function updateBatchCount() {
+  var checked = document.querySelectorAll('.batch-check:checked');
+  document.getElementById('batch-count').textContent = '已选 ' + checked.length + ' 条';
+}
+
+function batchSelectAll() {
+  var boxes = document.querySelectorAll('.batch-check');
+  var allChecked = Array.from(boxes).every(function(b) { return b.checked; });
+  boxes.forEach(function(b) { b.checked = !allChecked; });
+  updateBatchCount();
+}
+
+async function batchAction(action) {
+  var checked = document.querySelectorAll('.batch-check:checked');
+  if (!checked.length) { alert('请先勾选记忆'); return; }
+  var ids = Array.from(checked).map(function(b) { return b.dataset.id; });
+  var msg = action === 'delete' ? '确定删除 ' + ids.length + ' 条记忆？此操作不可撤销。' : '确定标记 ' + ids.length + ' 条记忆为已解决？';
+  if (!confirm(msg)) return;
+  try {
+    var res = await fetch(BASE + '/api/buckets/batch', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ action: action, ids: ids })
+    });
+    if (!res.ok) throw new Error('操作失败');
+    var data = await res.json();
+    alert('成功 ' + data.success + ' 条' + (data.failed ? '，失败 ' + data.failed + ' 条' : ''));
+    batchMode = false;
+    document.getElementById('batch-bar').classList.remove('active');
+    document.getElementById('batch-toggle').textContent = '☑ 批量';
+    loadBuckets();
+  } catch (e) {
+    alert('操作失败: ' + e.message);
+  }
+}
+
+function renderTimeline() {
+  var el = document.getElementById('timeline-content');
+  if (!allBuckets.length) {
+    el.innerHTML = '<div class="loading">没有记忆</div>';
+    return;
+  }
+  var sorted = allBuckets.slice().sort(function(a, b) {
+    return (b.created || '').localeCompare(a.created || '');
+  });
+  var months = {};
+  sorted.forEach(function(b) {
+    var d = b.created ? b.created.substring(0, 7) : '未知';
+    if (!months[d]) months[d] = [];
+    months[d].push(b);
+  });
+  var html = '';
+  Object.keys(months).sort().reverse().forEach(function(m) {
+    var label = m;
+    try {
+      var parts = m.split('-');
+      label = parts[0] + '年' + parseInt(parts[1]) + '月';
+    } catch(e) {}
+    html += '<div class="timeline-month"><h3>' + label + ' (' + months[m].length + ')</h3>';
+    months[m].forEach(function(b) {
+      var icon = b.pinned ? '📌' : b.type === 'feel' ? '🫧' : b.digested ? '🌿' : b.resolved ? '💤' : '💭';
+      var day = b.created ? b.created.substring(8, 10) + '日' : '';
+      html += '<div class="timeline-item" onclick="showDetail(\'' + b.id + '\')">' +
+        '<div class="timeline-date">' + day + '</div>' +
+        '<div class="timeline-icon">' + icon + '</div>' +
+        '<div class="timeline-body">' +
+          '<div class="timeline-name">' + esc(b.name) + '</div>' +
+          '<div class="timeline-preview">' + esc(b.content_preview) + '</div>' +
+        '</div>' +
+      '</div>';
+    });
+    html += '</div>';
+  });
+  el.innerHTML = html;
 }
 
 async function searchBuckets(query) {
@@ -1192,12 +1518,83 @@ async function showDetail(id) {
         '<div class="field"><label>已解决</label>' + (meta.resolved ? '✓' : '—') + '</div>' +
         '<div class="field"><label>已消化</label>' + (meta.digested ? '✓' : '—') + '</div>' +
         '<div class="field"><label>钉选</label>' + (meta.pinned ? '✓' : '—') + '</div>' +
+        '<div class="field"><label>事件类型</label>' + (meta.event_type || '—') + '</div>' +
+        '<div class="field"><label>来源</label>' + (meta.source || '—') + '</div>' +
         '<div class="field"><label>创建</label>' + (meta.created || '—') + '</div>' +
         '<div class="field"><label>最后活跃</label>' + (meta.last_active || '—') + '</div>' +
       '</div>' +
-      '<div class="detail-content">' + esc(b.content) + '</div>';
+      '<div class="detail-content">' + esc(b.content) + '</div>' +
+      '<div class="detail-actions">' +
+        '<button onclick="openEdit(\'' + id + '\')">✏️ 编辑</button>' +
+        '<button class="btn-delete" onclick="deleteBucket(\'' + id + '\')">🗑 删除</button>' +
+      '</div>';
   } catch (e) {
     content.innerHTML = '<div class="loading">加载失败: ' + e.message + '</div>';
+  }
+}
+
+async function openEdit(id) {
+  try {
+    var res = await fetch(BASE + '/api/bucket/' + id);
+    var b = await res.json();
+    var meta = b.metadata || {};
+    document.getElementById('edit-id').value = id;
+    document.getElementById('edit-name').value = meta.name || '';
+    document.getElementById('edit-content').value = b.content || '';
+    document.getElementById('edit-tags').value = (meta.tags || []).join(', ');
+    document.getElementById('edit-domain').value = (meta.domain || []).join(', ');
+    document.getElementById('edit-event-type').value = meta.event_type || '';
+    document.getElementById('edit-source').value = meta.source || '';
+    document.getElementById('edit-importance').value = meta.importance || 5;
+    document.getElementById('edit-valence').value = meta.valence != null ? meta.valence : 0.5;
+    document.getElementById('edit-arousal').value = meta.arousal != null ? meta.arousal : 0.3;
+    document.getElementById('edit-modal').classList.add('open');
+  } catch (e) {
+    alert('加载失败: ' + e.message);
+  }
+}
+
+function closeEdit() {
+  document.getElementById('edit-modal').classList.remove('open');
+}
+
+async function saveBucket() {
+  var id = document.getElementById('edit-id').value;
+  var body = {
+    name: document.getElementById('edit-name').value,
+    content: document.getElementById('edit-content').value,
+    tags: document.getElementById('edit-tags').value,
+    domain: document.getElementById('edit-domain').value,
+    event_type: document.getElementById('edit-event-type').value,
+    source: document.getElementById('edit-source').value,
+    importance: parseInt(document.getElementById('edit-importance').value) || 5,
+    valence: parseFloat(document.getElementById('edit-valence').value),
+    arousal: parseFloat(document.getElementById('edit-arousal').value),
+  };
+  try {
+    var res = await fetch(BASE + '/api/bucket/' + id, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error('保存失败 (' + res.status + ')');
+    closeEdit();
+    closeDetail();
+    loadBuckets();
+  } catch (e) {
+    alert('保存失败: ' + e.message);
+  }
+}
+
+async function deleteBucket(id) {
+  if (!confirm('确定要删除这条记忆吗？此操作不可撤销。')) return;
+  try {
+    var res = await fetch(BASE + '/api/bucket/' + id, { method: 'DELETE' });
+    if (!res.ok) throw new Error('删除失败 (' + res.status + ')');
+    closeDetail();
+    loadBuckets();
+  } catch (e) {
+    alert('删除失败: ' + e.message);
   }
 }
 
@@ -1205,131 +1602,307 @@ function closeDetail() {
   document.getElementById('detail-panel').classList.remove('open');
 }
 
-var networkData = null;
-async function loadNetwork() {
-  var canvas = document.getElementById('network-canvas');
-  var ctx = canvas.getContext('2d');
-  canvas.width = canvas.offsetWidth * window.devicePixelRatio;
-  canvas.height = canvas.offsetHeight * window.devicePixelRatio;
-  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-  var W = canvas.offsetWidth, H = canvas.offsetHeight;
+function openCreate() {
+  document.getElementById('create-name').value = '';
+  document.getElementById('create-content').value = '';
+  document.getElementById('create-tags').value = '';
+  document.getElementById('create-domain').value = '';
+  document.getElementById('create-event-type').value = '';
+  document.getElementById('create-source').value = '';
+  document.getElementById('create-importance').value = 5;
+  document.getElementById('create-valence').value = '';
+  document.getElementById('create-arousal').value = '';
+  document.getElementById('create-modal').classList.add('open');
+}
 
-  ctx.fillStyle = '#FDFCF0';
-  ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = '#8A8070';
-  ctx.font = '14px Inter, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('加载记忆网络…', W/2, H/2);
+function closeCreate() {
+  document.getElementById('create-modal').classList.remove('open');
+}
+
+async function createBucket() {
+  var content = document.getElementById('create-content').value.trim();
+  if (!content) { alert('请输入记忆内容'); return; }
+  var body = {
+    name: document.getElementById('create-name').value.trim(),
+    content: content,
+    tags: document.getElementById('create-tags').value,
+    domain: document.getElementById('create-domain').value,
+    event_type: document.getElementById('create-event-type').value,
+    source: document.getElementById('create-source').value,
+    importance: parseInt(document.getElementById('create-importance').value) || 5,
+    valence: document.getElementById('create-valence').value !== '' ? parseFloat(document.getElementById('create-valence').value) : -1,
+    arousal: document.getElementById('create-arousal').value !== '' ? parseFloat(document.getElementById('create-arousal').value) : -1,
+  };
+  try {
+    var res = await fetch(BASE + '/api/buckets', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body)
+    });
+    if (!res.ok) throw new Error('新增失败 (' + res.status + ')');
+    closeCreate();
+    loadBuckets();
+  } catch (e) {
+    alert('新增失败: ' + e.message);
+  }
+}
+
+var networkData = null;
+var brainRenderer = null;
+async function loadNetwork() {
+  var container = document.getElementById('network-3d');
+  container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#7ec8e3;font-size:14px;background:#080820;">加载记忆网络…</div>';
 
   try {
     var res = await fetch(BASE + '/api/network');
     networkData = await res.json();
-    drawNetwork(ctx, W, H, networkData);
-  } catch(e) {
-    ctx.fillText('加载失败: ' + e.message, W/2, H/2 + 24);
-  }
-}
 
-function drawNetwork(ctx, W, H, data) {
-  var nodes = data.nodes, edges = data.edges;
-  if (!nodes.length) {
-    ctx.fillStyle = '#8A8070';
-    ctx.fillText('没有记忆桶', W/2, H/2);
-    return;
-  }
+    if (!networkData.nodes.length) {
+      container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#7ec8e3;font-size:14px;background:#080820;">没有记忆桶</div>';
+      return;
+    }
 
-  var positions = {};
-  var cx = W / 2, cy = H / 2;
-  nodes.forEach(function(n, i) {
-    var angle = (i / nodes.length) * Math.PI * 2;
-    var r = Math.min(W, H) * 0.35;
-    positions[n.id] = {
-      x: cx + Math.cos(angle) * r + (Math.random() - 0.5) * 50,
-      y: cy + Math.sin(angle) * r + (Math.random() - 0.5) * 50,
-    };
-  });
+    container.innerHTML = '';
+    var W = container.offsetWidth, H = container.offsetHeight;
 
-  var edgeMap = {};
-  edges.forEach(function(e) {
-    if (!edgeMap[e.source]) edgeMap[e.source] = [];
-    if (!edgeMap[e.target]) edgeMap[e.target] = [];
-    edgeMap[e.source].push(e.target);
-    edgeMap[e.target].push(e.source);
-  });
+    // --- Three.js setup ---
+    var scene = new THREE.Scene();
+    var camera = new THREE.PerspectiveCamera(55, W / H, 0.1, 2000);
+    camera.position.set(0, 20, 220);
+    var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer.setSize(W, H);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setClearColor(0x050515);
+    container.appendChild(renderer.domElement);
 
-  for (var iter = 0; iter < 80; iter++) {
-    for (var i = 0; i < nodes.length; i++) {
-      for (var j = i + 1; j < nodes.length; j++) {
-        var a = positions[nodes[i].id], b = positions[nodes[j].id];
-        var dx = b.x - a.x, dy = b.y - a.y;
-        var dist = Math.max(1, Math.sqrt(dx*dx + dy*dy));
-        var force = 800 / (dist * dist);
-        dx = (dx / dist) * force;
-        dy = (dy / dist) * force;
-        a.x -= dx; a.y -= dy;
-        b.x += dx; b.y += dy;
+    // --- Particle texture (soft glow circle) ---
+    function makeGlowTexture(coreColor, glowColor) {
+      var c = document.createElement('canvas');
+      c.width = 64; c.height = 64;
+      var cx = c.getContext('2d');
+      var g = cx.createRadialGradient(32, 32, 0, 32, 32, 32);
+      g.addColorStop(0, coreColor);
+      g.addColorStop(0.15, coreColor);
+      g.addColorStop(0.4, glowColor);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = g;
+      cx.fillRect(0, 0, 64, 64);
+      return new THREE.CanvasTexture(c);
+    }
+    var texBrain = makeGlowTexture('rgba(80,180,255,1)', 'rgba(30,100,200,0.4)');
+    var texNode = makeGlowTexture('rgba(150,230,255,1)', 'rgba(60,160,255,0.6)');
+    var texPerm = makeGlowTexture('rgba(255,220,100,1)', 'rgba(200,160,40,0.5)');
+    var texFeel = makeGlowTexture('rgba(255,160,170,1)', 'rgba(200,100,120,0.5)');
+
+    // --- Brain shape generator ---
+    function brainSurface(u, v) {
+      var theta = u * Math.PI * 2;
+      var phi = v * Math.PI;
+      var a = 75, b = 95, c = 62;
+      var x = a * Math.sin(phi) * Math.cos(theta);
+      var y = c * Math.cos(phi);
+      var z = b * Math.sin(phi) * Math.sin(theta);
+
+      // Wrinkle/sulci effect
+      var wrinkle = (Math.sin(theta * 7 + phi * 3) * 0.25 +
+                     Math.sin(theta * 13 + phi * 7) * 0.15 +
+                     Math.sin(theta * 3 - phi * 11) * 0.10);
+      var r = Math.sqrt(x*x + y*y + z*z) || 1;
+      x += (x/r) * wrinkle * r * 0.15;
+      y += (y/r) * wrinkle * r * 0.10;
+      z += (z/r) * wrinkle * r * 0.15;
+
+      // Longitudinal fissure
+      var fissureDepth = Math.exp(-x * x * 0.008) * 12;
+      if (Math.abs(x) < 15) {
+        x = x > 0 ? x + fissureDepth : x - fissureDepth;
       }
+
+      // Flatten bottom
+      if (y < -40) y = -40 + (y + 40) * 0.3;
+
+      return { x: x, y: y, z: z };
     }
-    edges.forEach(function(e) {
-      var a = positions[e.source], b = positions[e.target];
+
+    // --- Background brain particles (surface) ---
+    var bgCount = 8000;
+    var bgPositions = new Float32Array(bgCount * 3);
+    for (var i = 0; i < bgCount; i++) {
+      var p = brainSurface(Math.random(), Math.random());
+      var depth = 0.7 + Math.random() * 0.3;
+      bgPositions[i*3] = p.x * depth + (Math.random()-0.5) * 4;
+      bgPositions[i*3+1] = p.y * depth + (Math.random()-0.5) * 4;
+      bgPositions[i*3+2] = p.z * depth + (Math.random()-0.5) * 4;
+    }
+    var bgGeo = new THREE.BufferGeometry();
+    bgGeo.setAttribute('position', new THREE.BufferAttribute(bgPositions, 3));
+    var bgMat = new THREE.PointsMaterial({
+      map: texBrain, size: 2.5, transparent: true,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+      opacity: 0.35, color: 0x3388cc
+    });
+    scene.add(new THREE.Points(bgGeo, bgMat));
+
+    // --- Inner glow layer ---
+    var innerCount = 2000;
+    var innerPos = new Float32Array(innerCount * 3);
+    for (var i = 0; i < innerCount; i++) {
+      var p = brainSurface(Math.random(), Math.random());
+      var depth = 0.3 + Math.random() * 0.5;
+      innerPos[i*3] = p.x * depth + (Math.random()-0.5) * 6;
+      innerPos[i*3+1] = p.y * depth + (Math.random()-0.5) * 6;
+      innerPos[i*3+2] = p.z * depth + (Math.random()-0.5) * 6;
+    }
+    var innerGeo = new THREE.BufferGeometry();
+    innerGeo.setAttribute('position', new THREE.BufferAttribute(innerPos, 3));
+    var innerMat = new THREE.PointsMaterial({
+      map: texBrain, size: 3.5, transparent: true,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+      opacity: 0.12, color: 0x2266aa
+    });
+    scene.add(new THREE.Points(innerGeo, innerMat));
+
+    // --- Surface highlight layer (bright rim) ---
+    var hlCount = 1500;
+    var hlPos = new Float32Array(hlCount * 3);
+    for (var i = 0; i < hlCount; i++) {
+      var p = brainSurface(Math.random(), Math.random());
+      hlPos[i*3] = p.x * 1.02 + (Math.random()-0.5) * 2;
+      hlPos[i*3+1] = p.y * 1.02 + (Math.random()-0.5) * 2;
+      hlPos[i*3+2] = p.z * 1.02 + (Math.random()-0.5) * 2;
+    }
+    var hlGeo = new THREE.BufferGeometry();
+    hlGeo.setAttribute('position', new THREE.BufferAttribute(hlPos, 3));
+    var hlMat = new THREE.PointsMaterial({
+      map: texBrain, size: 4.5, transparent: true,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+      opacity: 0.2, color: 0x55bbee
+    });
+    scene.add(new THREE.Points(hlGeo, hlMat));
+
+    // --- Memory nodes ---
+    var typeTextures = { dynamic: texNode, permanent: texPerm, feel: texFeel, archived: texNode };
+    var typeColors = { dynamic: 0x4fc3f7, permanent: 0xffd54f, feel: 0xef9a9a, archived: 0x90a4ae };
+    var nodePositions = [];
+
+    networkData.nodes.forEach(function(n, i) {
+      var u = (i / networkData.nodes.length) + Math.random() * 0.05;
+      var p = brainSurface(u % 1, Math.random());
+      p.x += (Math.random()-0.5) * 3;
+      p.y += (Math.random()-0.5) * 3;
+      p.z += (Math.random()-0.5) * 3;
+      nodePositions.push({ id: n.id, x: p.x, y: p.y, z: p.z });
+
+      var nGeo = new THREE.BufferGeometry();
+      nGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([p.x, p.y, p.z]), 3));
+      var nMat = new THREE.PointsMaterial({
+        map: typeTextures[n.type] || texNode,
+        size: Math.max(3, Math.min(8, (n.score || 5) * 0.4)),
+        transparent: true, blending: THREE.AdditiveBlending,
+        depthWrite: false, opacity: 0.9,
+        color: typeColors[n.type] || 0x4fc3f7
+      });
+      scene.add(new THREE.Points(nGeo, nMat));
+    });
+
+    // --- Connection lines ---
+    var posMap = {};
+    nodePositions.forEach(function(np) { posMap[np.id] = np; });
+    networkData.edges.forEach(function(e) {
+      var a = posMap[e.source], b = posMap[e.target];
       if (!a || !b) return;
-      var dx = b.x - a.x, dy = b.y - a.y;
-      var dist = Math.sqrt(dx*dx + dy*dy);
-      var force = (dist - 100) * 0.01 * (e.similarity || 0.5);
-      dx = (dx / Math.max(1,dist)) * force;
-      dy = (dy / Math.max(1,dist)) * force;
-      a.x += dx; a.y += dy;
-      b.x -= dx; b.y -= dy;
+      var lGeo = new THREE.BufferGeometry();
+      lGeo.setAttribute('position', new THREE.BufferAttribute(
+        new Float32Array([a.x, a.y, a.z, b.x, b.y, b.z]), 3
+      ));
+      var lMat = new THREE.LineBasicMaterial({
+        color: 0x3388ff, transparent: true,
+        opacity: Math.max(0.01, (e.similarity || 0.5) * 0.06),
+        blending: THREE.AdditiveBlending
+      });
+      scene.add(new THREE.Line(lGeo, lMat));
     });
-    nodes.forEach(function(n) {
-      var p = positions[n.id];
-      p.x += (cx - p.x) * 0.01;
-      p.y += (cy - p.y) * 0.01;
-    });
-  }
 
-  ctx.fillStyle = '#FDFCF0';
-  ctx.fillRect(0, 0, W, H);
-
-  edges.forEach(function(e) {
-    var a = positions[e.source], b = positions[e.target];
-    if (!a || !b) return;
-    ctx.beginPath();
-    ctx.moveTo(a.x, a.y);
-    ctx.lineTo(b.x, b.y);
-    ctx.strokeStyle = 'rgba(47, 79, 79, ' + (e.similarity * 0.35) + ')';
-    ctx.lineWidth = Math.max(0.5, e.similarity * 2);
-    ctx.stroke();
-  });
-
-  var colors = { dynamic: '#2F4F4F', permanent: '#9A7B4F', feel: '#8B6A6A', archived: '#B0A590' };
-  nodes.forEach(function(n) {
-    var p = positions[n.id];
-    var r = Math.max(4, Math.min(14, n.score * 0.8));
-    var color = colors[n.type] || '#2F4F4F';
-
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, r + 4, 0, Math.PI * 2);
-    ctx.fillStyle = color + '15';
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-    ctx.fillStyle = n.resolved ? color + '70' : color;
-    ctx.fill();
-
-    if (n.pinned) {
-      ctx.strokeStyle = '#9A7B4F';
-      ctx.lineWidth = 2;
-      ctx.stroke();
+    // --- Floating dust ---
+    var dustCount = 300;
+    var dustPos = new Float32Array(dustCount * 3);
+    for (var i = 0; i < dustCount; i++) {
+      dustPos[i*3] = (Math.random()-0.5) * 400;
+      dustPos[i*3+1] = (Math.random()-0.5) * 300;
+      dustPos[i*3+2] = (Math.random()-0.5) * 400;
     }
+    var dustGeo = new THREE.BufferGeometry();
+    dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
+    var dustMat = new THREE.PointsMaterial({
+      map: texBrain, size: 2, transparent: true,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+      opacity: 0.15, color: 0x4488bb
+    });
+    scene.add(new THREE.Points(dustGeo, dustMat));
 
-    var name = n.name.length > 10 ? n.name.slice(0, 10) + '…' : n.name;
-    ctx.fillStyle = '#3A3530';
-    ctx.font = '11px Inter, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(name, p.x, p.y + r + 14);
-  });
+    // --- Mouse/touch rotation ---
+    var isDragging = false, prevX = 0, prevY = 0;
+    var rotY = 0, rotX = 0.15, camDist = 220;
+    var autoRotate = true;
+
+    container.addEventListener('mousedown', function(ev) { isDragging = true; autoRotate = false; prevX = ev.clientX; prevY = ev.clientY; });
+    container.addEventListener('mousemove', function(ev) {
+      if (!isDragging) return;
+      rotY += (ev.clientX - prevX) * 0.005;
+      rotX += (ev.clientY - prevY) * 0.005;
+      rotX = Math.max(-1.2, Math.min(1.2, rotX));
+      prevX = ev.clientX; prevY = ev.clientY;
+    });
+    container.addEventListener('mouseup', function() { isDragging = false; });
+    container.addEventListener('mouseleave', function() { isDragging = false; });
+    container.addEventListener('touchstart', function(ev) { isDragging = true; autoRotate = false; prevX = ev.touches[0].clientX; prevY = ev.touches[0].clientY; });
+    container.addEventListener('touchmove', function(ev) {
+      if (!isDragging) return;
+      rotY += (ev.touches[0].clientX - prevX) * 0.005;
+      rotX += (ev.touches[0].clientY - prevY) * 0.005;
+      rotX = Math.max(-1.2, Math.min(1.2, rotX));
+      prevX = ev.touches[0].clientX; prevY = ev.touches[0].clientY;
+    });
+    container.addEventListener('touchend', function() { isDragging = false; });
+    container.addEventListener('wheel', function(ev) {
+      ev.preventDefault();
+      camDist = Math.max(100, Math.min(500, camDist + ev.deltaY * 0.3));
+    }, { passive: false });
+
+    // --- Tooltip ---
+    var tooltip = document.createElement('div');
+    tooltip.style.cssText = 'position:absolute;top:0;left:0;background:rgba(5,5,25,0.85);color:#7ec8e3;padding:6px 12px;border-radius:8px;font-size:12px;pointer-events:none;display:none;border:1px solid rgba(80,180,255,0.3);z-index:10;';
+    container.style.position = 'relative';
+    container.appendChild(tooltip);
+
+    // --- Animation loop ---
+    function animate() {
+      requestAnimationFrame(animate);
+      if (autoRotate) rotY += 0.003;
+      camera.position.x = Math.sin(rotY) * camDist;
+      camera.position.y = Math.sin(rotX) * 80 + 20;
+      camera.position.z = Math.cos(rotY) * camDist;
+      camera.lookAt(0, 0, 0);
+      bgMat.opacity = 0.3 + Math.sin(Date.now() * 0.001) * 0.05;
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // Resize
+    window.addEventListener('resize', function() {
+      if (container.offsetWidth) {
+        W = container.offsetWidth; H = container.offsetHeight;
+        camera.aspect = W / H;
+        camera.updateProjectionMatrix();
+        renderer.setSize(W, H);
+      }
+    });
+
+    brainRenderer = renderer;
+
+  } catch(e) {
+    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#ef9a9a;font-size:14px;background:#080820;">加载失败: ' + e.message + '</div>';
+  }
 }
 
 function esc(s) {
