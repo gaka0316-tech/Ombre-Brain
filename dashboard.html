@@ -1067,7 +1067,7 @@
   </div>
 </div>
 
-<script src="https://unpkg.com/3d-force-graph@1.73.3/dist/3d-force-graph.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
 <script>
 // ========================================
@@ -1648,7 +1648,7 @@ async function createBucket() {
 }
 
 var networkData = null;
-var graph3d = null;
+var brainRenderer = null;
 async function loadNetwork() {
   var container = document.getElementById('network-3d');
   container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#7ec8e3;font-size:14px;background:#080820;">加载记忆网络…</div>';
@@ -1663,124 +1663,224 @@ async function loadNetwork() {
     }
 
     container.innerHTML = '';
+    var W = container.offsetWidth, H = container.offsetHeight;
 
-    var typeColors = {
-      dynamic: '#4fc3f7',
-      permanent: '#ffd54f',
-      feel: '#ef9a9a',
-      archived: '#90a4ae'
-    };
-    var typeGlow = {
-      dynamic: 'rgba(79,195,247,0.6)',
-      permanent: 'rgba(255,213,79,0.6)',
-      feel: 'rgba(239,154,154,0.5)',
-      archived: 'rgba(144,164,174,0.3)'
-    };
+    // --- Three.js setup ---
+    var scene = new THREE.Scene();
+    var camera = new THREE.PerspectiveCamera(55, W / H, 0.1, 2000);
+    camera.position.set(0, 20, 220);
+    var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer.setSize(W, H);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setClearColor(0x050515);
+    container.appendChild(renderer.domElement);
 
-    // --- Brain shape: distribute nodes on two hemispheres ---
-    function brainPosition(index, total) {
-      var half = Math.floor(total / 2);
-      var isRight = index >= half;
-      var localIdx = isRight ? index - half : index;
-      var localTotal = isRight ? total - half : half;
+    // --- Particle texture (soft glow circle) ---
+    function makeGlowTexture(coreColor, glowColor) {
+      var c = document.createElement('canvas');
+      c.width = 64; c.height = 64;
+      var cx = c.getContext('2d');
+      var g = cx.createRadialGradient(32, 32, 0, 32, 32, 32);
+      g.addColorStop(0, coreColor);
+      g.addColorStop(0.15, coreColor);
+      g.addColorStop(0.4, glowColor);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      cx.fillStyle = g;
+      cx.fillRect(0, 0, 64, 64);
+      return new THREE.CanvasTexture(c);
+    }
+    var texBrain = makeGlowTexture('rgba(80,180,255,1)', 'rgba(30,100,200,0.4)');
+    var texNode = makeGlowTexture('rgba(150,230,255,1)', 'rgba(60,160,255,0.6)');
+    var texPerm = makeGlowTexture('rgba(255,220,100,1)', 'rgba(200,160,40,0.5)');
+    var texFeel = makeGlowTexture('rgba(255,160,170,1)', 'rgba(200,100,120,0.5)');
 
-      // Golden angle distribution on hemisphere surface
-      var golden = Math.PI * (3 - Math.sqrt(5));
-      var theta = golden * localIdx;
-      var y = 1 - (localIdx / Math.max(1, localTotal - 1)) * 2; // -1 to 1
-      var radius = Math.sqrt(1 - y * y);
+    // --- Brain shape generator ---
+    function brainSurface(u, v) {
+      var theta = u * Math.PI * 2;
+      var phi = v * Math.PI;
+      var a = 75, b = 95, c = 62;
+      var x = a * Math.sin(phi) * Math.cos(theta);
+      var y = c * Math.cos(phi);
+      var z = b * Math.sin(phi) * Math.sin(theta);
 
-      // Brain dimensions
-      var scaleX = 55, scaleY = 70, scaleZ = 50;
-      var px = radius * Math.cos(theta) * scaleX;
-      var py = y * scaleY;
-      var pz = radius * Math.sin(theta) * scaleZ;
+      // Wrinkle/sulci effect
+      var wrinkle = (Math.sin(theta * 7 + phi * 3) * 0.15 +
+                     Math.sin(theta * 13 + phi * 7) * 0.08 +
+                     Math.sin(theta * 3 - phi * 11) * 0.06);
+      var r = Math.sqrt(x*x + y*y + z*z) || 1;
+      x += (x/r) * wrinkle * r * 0.12;
+      y += (y/r) * wrinkle * r * 0.08;
+      z += (z/r) * wrinkle * r * 0.12;
 
-      // Split hemispheres: offset left/right
-      px = isRight ? Math.abs(px) + 8 : -Math.abs(px) - 8;
+      // Longitudinal fissure
+      var fissureDepth = Math.exp(-x * x * 0.008) * 12;
+      if (Math.abs(x) < 15) {
+        x = x > 0 ? x + fissureDepth : x - fissureDepth;
+      }
 
-      // Add slight noise for organic feel
-      px += (Math.random() - 0.5) * 10;
-      py += (Math.random() - 0.5) * 10;
-      pz += (Math.random() - 0.5) * 10;
+      // Flatten bottom
+      if (y < -40) y = -40 + (y + 40) * 0.3;
 
-      return { x: px, y: py, z: pz };
+      return { x: x, y: y, z: z };
     }
 
-    // Shuffle nodes so different types are mixed in the brain shape
-    var shuffledNodes = networkData.nodes.slice();
-    for (var si = shuffledNodes.length - 1; si > 0; si--) {
-      var sj = Math.floor(Math.random() * (si + 1));
-      var tmp = shuffledNodes[si]; shuffledNodes[si] = shuffledNodes[sj]; shuffledNodes[sj] = tmp;
+    // --- Background brain particles (surface) ---
+    var bgCount = 4000;
+    var bgPositions = new Float32Array(bgCount * 3);
+    for (var i = 0; i < bgCount; i++) {
+      var p = brainSurface(Math.random(), Math.random());
+      var depth = 0.7 + Math.random() * 0.3;
+      bgPositions[i*3] = p.x * depth + (Math.random()-0.5) * 4;
+      bgPositions[i*3+1] = p.y * depth + (Math.random()-0.5) * 4;
+      bgPositions[i*3+2] = p.z * depth + (Math.random()-0.5) * 4;
     }
+    var bgGeo = new THREE.BufferGeometry();
+    bgGeo.setAttribute('position', new THREE.BufferAttribute(bgPositions, 3));
+    var bgMat = new THREE.PointsMaterial({
+      map: texBrain, size: 2.5, transparent: true,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+      opacity: 0.35, color: 0x3388cc
+    });
+    scene.add(new THREE.Points(bgGeo, bgMat));
 
-    var graphData = {
-      nodes: shuffledNodes.map(function(n, i) {
-        var pos = brainPosition(i, shuffledNodes.length);
-        return {
-          id: n.id,
-          name: n.name,
-          type: n.type,
-          score: n.score || 10,
-          pinned: n.pinned,
-          resolved: n.resolved,
-          color: typeColors[n.type] || '#4fc3f7',
-          glow: typeGlow[n.type] || 'rgba(79,195,247,0.6)',
-          fx: pos.x, fy: pos.y, fz: pos.z
-        };
-      }),
-      links: networkData.edges.map(function(e) {
-        return {
-          source: e.source,
-          target: e.target,
-          similarity: e.similarity || 0.5
-        };
-      })
-    };
+    // --- Inner glow layer ---
+    var innerCount = 2000;
+    var innerPos = new Float32Array(innerCount * 3);
+    for (var i = 0; i < innerCount; i++) {
+      var p = brainSurface(Math.random(), Math.random());
+      var depth = 0.3 + Math.random() * 0.5;
+      innerPos[i*3] = p.x * depth + (Math.random()-0.5) * 6;
+      innerPos[i*3+1] = p.y * depth + (Math.random()-0.5) * 6;
+      innerPos[i*3+2] = p.z * depth + (Math.random()-0.5) * 6;
+    }
+    var innerGeo = new THREE.BufferGeometry();
+    innerGeo.setAttribute('position', new THREE.BufferAttribute(innerPos, 3));
+    var innerMat = new THREE.PointsMaterial({
+      map: texBrain, size: 3.5, transparent: true,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+      opacity: 0.12, color: 0x2266aa
+    });
+    scene.add(new THREE.Points(innerGeo, innerMat));
 
-    graph3d = ForceGraph3D()(container)
-      .graphData(graphData)
-      .backgroundColor('#080820')
-      .width(container.offsetWidth)
-      .height(container.offsetHeight)
-      .nodeVal(function(n) { return Math.max(0.5, Math.min(3, n.score * 0.1)); })
-      .nodeColor(function(n) { return n.color; })
-      .nodeOpacity(0.9)
-      .nodeLabel(function(n) { return n.name; })
-      .linkWidth(function(l) { return Math.max(0.3, l.similarity * 1.5); })
-      .linkColor(function(l) { return 'rgba(100,180,255,' + (l.similarity * 0.3) + ')'; })
-      .linkOpacity(0.4)
-      .enableNodeDrag(true)
-      .enableNavigationControls(true)
-      .showNavInfo(false);
+    // --- Memory nodes ---
+    var typeTextures = { dynamic: texNode, permanent: texPerm, feel: texFeel, archived: texNode };
+    var typeColors = { dynamic: 0x4fc3f7, permanent: 0xffd54f, feel: 0xef9a9a, archived: 0x90a4ae };
+    var nodePositions = [];
 
-    graph3d.d3Force('charge', null);
-    graph3d.d3Force('link', null);
-    graph3d.d3Force('center', null);
+    networkData.nodes.forEach(function(n, i) {
+      var u = (i / networkData.nodes.length) + Math.random() * 0.05;
+      var p = brainSurface(u % 1, Math.random());
+      p.x += (Math.random()-0.5) * 3;
+      p.y += (Math.random()-0.5) * 3;
+      p.z += (Math.random()-0.5) * 3;
+      nodePositions.push({ id: n.id, x: p.x, y: p.y, z: p.z });
 
-    // Auto-rotate around brain
-    var angle = 0;
-    graph3d.cameraPosition({ x: 0, y: 0, z: 250 });
-    var rotateInterval = setInterval(function() {
-      if (!graph3d) { clearInterval(rotateInterval); return; }
-      graph3d.cameraPosition({
-        x: 250 * Math.sin(angle),
-        y: 30,
-        z: 250 * Math.cos(angle)
+      var nGeo = new THREE.BufferGeometry();
+      nGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([p.x, p.y, p.z]), 3));
+      var nMat = new THREE.PointsMaterial({
+        map: typeTextures[n.type] || texNode,
+        size: Math.max(3, Math.min(8, (n.score || 5) * 0.4)),
+        transparent: true, blending: THREE.AdditiveBlending,
+        depthWrite: false, opacity: 0.9,
+        color: typeColors[n.type] || 0x4fc3f7
       });
-      angle += 0.003;
-    }, 30);
+      scene.add(new THREE.Points(nGeo, nMat));
+    });
 
-    // Stop auto-rotate on user interaction
-    container.addEventListener('mousedown', function() { clearInterval(rotateInterval); }, { once: true });
-    container.addEventListener('touchstart', function() { clearInterval(rotateInterval); }, { once: true });
+    // --- Connection lines ---
+    var posMap = {};
+    nodePositions.forEach(function(np) { posMap[np.id] = np; });
+    networkData.edges.forEach(function(e) {
+      var a = posMap[e.source], b = posMap[e.target];
+      if (!a || !b) return;
+      var lGeo = new THREE.BufferGeometry();
+      lGeo.setAttribute('position', new THREE.BufferAttribute(
+        new Float32Array([a.x, a.y, a.z, b.x, b.y, b.z]), 3
+      ));
+      var lMat = new THREE.LineBasicMaterial({
+        color: 0x3388ff, transparent: true,
+        opacity: Math.max(0.03, (e.similarity || 0.5) * 0.12),
+        blending: THREE.AdditiveBlending
+      });
+      scene.add(new THREE.Line(lGeo, lMat));
+    });
+
+    // --- Floating dust ---
+    var dustCount = 300;
+    var dustPos = new Float32Array(dustCount * 3);
+    for (var i = 0; i < dustCount; i++) {
+      dustPos[i*3] = (Math.random()-0.5) * 400;
+      dustPos[i*3+1] = (Math.random()-0.5) * 300;
+      dustPos[i*3+2] = (Math.random()-0.5) * 400;
+    }
+    var dustGeo = new THREE.BufferGeometry();
+    dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
+    var dustMat = new THREE.PointsMaterial({
+      map: texBrain, size: 2, transparent: true,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+      opacity: 0.15, color: 0x4488bb
+    });
+    scene.add(new THREE.Points(dustGeo, dustMat));
+
+    // --- Mouse/touch rotation ---
+    var isDragging = false, prevX = 0, prevY = 0;
+    var rotY = 0, rotX = 0.15, camDist = 220;
+    var autoRotate = true;
+
+    container.addEventListener('mousedown', function(ev) { isDragging = true; autoRotate = false; prevX = ev.clientX; prevY = ev.clientY; });
+    container.addEventListener('mousemove', function(ev) {
+      if (!isDragging) return;
+      rotY += (ev.clientX - prevX) * 0.005;
+      rotX += (ev.clientY - prevY) * 0.005;
+      rotX = Math.max(-1.2, Math.min(1.2, rotX));
+      prevX = ev.clientX; prevY = ev.clientY;
+    });
+    container.addEventListener('mouseup', function() { isDragging = false; });
+    container.addEventListener('mouseleave', function() { isDragging = false; });
+    container.addEventListener('touchstart', function(ev) { isDragging = true; autoRotate = false; prevX = ev.touches[0].clientX; prevY = ev.touches[0].clientY; });
+    container.addEventListener('touchmove', function(ev) {
+      if (!isDragging) return;
+      rotY += (ev.touches[0].clientX - prevX) * 0.005;
+      rotX += (ev.touches[0].clientY - prevY) * 0.005;
+      rotX = Math.max(-1.2, Math.min(1.2, rotX));
+      prevX = ev.touches[0].clientX; prevY = ev.touches[0].clientY;
+    });
+    container.addEventListener('touchend', function() { isDragging = false; });
+    container.addEventListener('wheel', function(ev) {
+      ev.preventDefault();
+      camDist = Math.max(100, Math.min(500, camDist + ev.deltaY * 0.3));
+    }, { passive: false });
+
+    // --- Tooltip ---
+    var tooltip = document.createElement('div');
+    tooltip.style.cssText = 'position:absolute;top:0;left:0;background:rgba(5,5,25,0.85);color:#7ec8e3;padding:6px 12px;border-radius:8px;font-size:12px;pointer-events:none;display:none;border:1px solid rgba(80,180,255,0.3);z-index:10;';
+    container.style.position = 'relative';
+    container.appendChild(tooltip);
+
+    // --- Animation loop ---
+    function animate() {
+      requestAnimationFrame(animate);
+      if (autoRotate) rotY += 0.003;
+      camera.position.x = Math.sin(rotY) * camDist;
+      camera.position.y = Math.sin(rotX) * 80 + 20;
+      camera.position.z = Math.cos(rotY) * camDist;
+      camera.lookAt(0, 0, 0);
+      bgMat.opacity = 0.3 + Math.sin(Date.now() * 0.001) * 0.05;
+      renderer.render(scene, camera);
+    }
+    animate();
 
     // Resize
     window.addEventListener('resize', function() {
-      if (graph3d && container.offsetWidth) {
-        graph3d.width(container.offsetWidth).height(container.offsetHeight);
+      if (container.offsetWidth) {
+        W = container.offsetWidth; H = container.offsetHeight;
+        camera.aspect = W / H;
+        camera.updateProjectionMatrix();
+        renderer.setSize(W, H);
       }
     });
+
+    brainRenderer = renderer;
 
   } catch(e) {
     container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#ef9a9a;font-size:14px;background:#080820;">加载失败: ' + e.message + '</div>';
