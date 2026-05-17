@@ -454,13 +454,13 @@
     box-shadow: inset 3px 3px 6px var(--shadow-dark-subtle), inset -2px -2px 4px var(--shadow-light);
   }
 
-  #network-canvas {
+  #network-3d {
     width: 100%;
     height: calc(100vh - 180px);
-    background: var(--bg);
     border-radius: 20px;
     border: 1px solid var(--border);
-    box-shadow: inset 4px 4px 10px var(--shadow-dark-subtle), inset -4px -4px 10px var(--shadow-light);
+    overflow: hidden;
+    position: relative;
   }
   .network-legend {
     display: flex;
@@ -728,12 +728,12 @@
 
 <div class="content" id="network-view" style="display:none">
   <div class="network-legend">
-    <div class="legend-item"><span class="legend-dot" style="background:#2F4F4F"></span> dynamic</div>
-    <div class="legend-item"><span class="legend-dot" style="background:#9A7B4F"></span> permanent</div>
-    <div class="legend-item"><span class="legend-dot" style="background:#8B6A6A"></span> feel</div>
-    <div class="legend-item"><span class="legend-dot" style="background:#B0A590"></span> archived</div>
+    <div class="legend-item"><span class="legend-dot" style="background:#4fc3f7"></span> dynamic</div>
+    <div class="legend-item"><span class="legend-dot" style="background:#ffd54f"></span> permanent</div>
+    <div class="legend-item"><span class="legend-dot" style="background:#ef9a9a"></span> feel</div>
+    <div class="legend-item"><span class="legend-dot" style="background:#90a4ae"></span> archived</div>
   </div>
-  <canvas id="network-canvas"></canvas>
+  <div id="network-3d"></div>
 </div>
 
 <div class="content" id="import-view" style="display:none">
@@ -1066,6 +1066,8 @@
     <div id="auth-error" style="color:var(--negative);font-size:13px;margin-top:12px;display:none;"></div>
   </div>
 </div>
+
+<script src="https://unpkg.com/3d-force-graph@1.73.3/dist/3d-force-graph.min.js"></script>
 
 <script>
 // ========================================
@@ -1646,130 +1648,101 @@ async function createBucket() {
 }
 
 var networkData = null;
+var graph3d = null;
 async function loadNetwork() {
-  var canvas = document.getElementById('network-canvas');
-  var ctx = canvas.getContext('2d');
-  canvas.width = canvas.offsetWidth * window.devicePixelRatio;
-  canvas.height = canvas.offsetHeight * window.devicePixelRatio;
-  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-  var W = canvas.offsetWidth, H = canvas.offsetHeight;
-
-  ctx.fillStyle = '#FDFCF0';
-  ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = '#8A8070';
-  ctx.font = '14px Inter, sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('加载记忆网络…', W/2, H/2);
+  var container = document.getElementById('network-3d');
+  container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#7ec8e3;font-size:14px;background:#080820;">加载记忆网络…</div>';
 
   try {
     var res = await fetch(BASE + '/api/network');
     networkData = await res.json();
-    drawNetwork(ctx, W, H, networkData);
-  } catch(e) {
-    ctx.fillText('加载失败: ' + e.message, W/2, H/2 + 24);
-  }
-}
 
-function drawNetwork(ctx, W, H, data) {
-  var nodes = data.nodes, edges = data.edges;
-  if (!nodes.length) {
-    ctx.fillStyle = '#8A8070';
-    ctx.fillText('没有记忆桶', W/2, H/2);
-    return;
-  }
+    if (!networkData.nodes.length) {
+      container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#7ec8e3;font-size:14px;background:#080820;">没有记忆桶</div>';
+      return;
+    }
 
-  var positions = {};
-  var cx = W / 2, cy = H / 2;
-  nodes.forEach(function(n, i) {
-    var angle = (i / nodes.length) * Math.PI * 2;
-    var r = Math.min(W, H) * 0.35;
-    positions[n.id] = {
-      x: cx + Math.cos(angle) * r + (Math.random() - 0.5) * 50,
-      y: cy + Math.sin(angle) * r + (Math.random() - 0.5) * 50,
+    container.innerHTML = '';
+
+    var typeColors = {
+      dynamic: '#4fc3f7',
+      permanent: '#ffd54f',
+      feel: '#ef9a9a',
+      archived: '#90a4ae'
     };
-  });
+    var typeGlow = {
+      dynamic: 'rgba(79,195,247,0.6)',
+      permanent: 'rgba(255,213,79,0.6)',
+      feel: 'rgba(239,154,154,0.5)',
+      archived: 'rgba(144,164,174,0.3)'
+    };
 
-  var edgeMap = {};
-  edges.forEach(function(e) {
-    if (!edgeMap[e.source]) edgeMap[e.source] = [];
-    if (!edgeMap[e.target]) edgeMap[e.target] = [];
-    edgeMap[e.source].push(e.target);
-    edgeMap[e.target].push(e.source);
-  });
+    var graphData = {
+      nodes: networkData.nodes.map(function(n) {
+        return {
+          id: n.id,
+          name: n.name,
+          type: n.type,
+          score: n.score || 10,
+          pinned: n.pinned,
+          resolved: n.resolved,
+          color: typeColors[n.type] || '#4fc3f7',
+          glow: typeGlow[n.type] || 'rgba(79,195,247,0.6)'
+        };
+      }),
+      links: networkData.edges.map(function(e) {
+        return {
+          source: e.source,
+          target: e.target,
+          similarity: e.similarity || 0.5
+        };
+      })
+    };
 
-  for (var iter = 0; iter < 80; iter++) {
-    for (var i = 0; i < nodes.length; i++) {
-      for (var j = i + 1; j < nodes.length; j++) {
-        var a = positions[nodes[i].id], b = positions[nodes[j].id];
-        var dx = b.x - a.x, dy = b.y - a.y;
-        var dist = Math.max(1, Math.sqrt(dx*dx + dy*dy));
-        var force = 800 / (dist * dist);
-        dx = (dx / dist) * force;
-        dy = (dy / dist) * force;
-        a.x -= dx; a.y -= dy;
-        b.x += dx; b.y += dy;
+    graph3d = ForceGraph3D()(container)
+      .graphData(graphData)
+      .backgroundColor('#080820')
+      .width(container.offsetWidth)
+      .height(container.offsetHeight)
+      .nodeVal(function(n) { return Math.max(2, n.score * 0.5); })
+      .nodeColor(function(n) { return n.color; })
+      .nodeOpacity(0.9)
+      .nodeLabel(function(n) { return n.name; })
+      .linkWidth(function(l) { return Math.max(0.3, l.similarity * 1.5); })
+      .linkColor(function(l) { return 'rgba(100,180,255,' + (l.similarity * 0.3) + ')'; })
+      .linkOpacity(0.4)
+      .enableNodeDrag(true)
+      .enableNavigationControls(true)
+      .showNavInfo(false);
+
+    graph3d.d3Force('charge').strength(-30);
+    graph3d.d3Force('link').distance(function(l) { return 80 / (l.similarity || 0.5); });
+
+    // Auto-rotate
+    var angle = 0;
+    var rotateInterval = setInterval(function() {
+      if (!graph3d) { clearInterval(rotateInterval); return; }
+      graph3d.cameraPosition({
+        x: 300 * Math.sin(angle),
+        z: 300 * Math.cos(angle)
+      });
+      angle += 0.002;
+    }, 30);
+
+    // Stop auto-rotate on user interaction
+    container.addEventListener('mousedown', function() { clearInterval(rotateInterval); }, { once: true });
+    container.addEventListener('touchstart', function() { clearInterval(rotateInterval); }, { once: true });
+
+    // Resize
+    window.addEventListener('resize', function() {
+      if (graph3d && container.offsetWidth) {
+        graph3d.width(container.offsetWidth).height(container.offsetHeight);
       }
-    }
-    edges.forEach(function(e) {
-      var a = positions[e.source], b = positions[e.target];
-      if (!a || !b) return;
-      var dx = b.x - a.x, dy = b.y - a.y;
-      var dist = Math.sqrt(dx*dx + dy*dy);
-      var force = (dist - 100) * 0.01 * (e.similarity || 0.5);
-      dx = (dx / Math.max(1,dist)) * force;
-      dy = (dy / Math.max(1,dist)) * force;
-      a.x += dx; a.y += dy;
-      b.x -= dx; b.y -= dy;
     });
-    nodes.forEach(function(n) {
-      var p = positions[n.id];
-      p.x += (cx - p.x) * 0.01;
-      p.y += (cy - p.y) * 0.01;
-    });
+
+  } catch(e) {
+    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#ef9a9a;font-size:14px;background:#080820;">加载失败: ' + e.message + '</div>';
   }
-
-  ctx.fillStyle = '#FDFCF0';
-  ctx.fillRect(0, 0, W, H);
-
-  edges.forEach(function(e) {
-    var a = positions[e.source], b = positions[e.target];
-    if (!a || !b) return;
-    ctx.beginPath();
-    ctx.moveTo(a.x, a.y);
-    ctx.lineTo(b.x, b.y);
-    ctx.strokeStyle = 'rgba(47, 79, 79, ' + (e.similarity * 0.35) + ')';
-    ctx.lineWidth = Math.max(0.5, e.similarity * 2);
-    ctx.stroke();
-  });
-
-  var colors = { dynamic: '#2F4F4F', permanent: '#9A7B4F', feel: '#8B6A6A', archived: '#B0A590' };
-  nodes.forEach(function(n) {
-    var p = positions[n.id];
-    var r = Math.max(4, Math.min(14, n.score * 0.8));
-    var color = colors[n.type] || '#2F4F4F';
-
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, r + 4, 0, Math.PI * 2);
-    ctx.fillStyle = color + '15';
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-    ctx.fillStyle = n.resolved ? color + '70' : color;
-    ctx.fill();
-
-    if (n.pinned) {
-      ctx.strokeStyle = '#9A7B4F';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
-
-    var name = n.name.length > 10 ? n.name.slice(0, 10) + '…' : n.name;
-    ctx.fillStyle = '#3A3530';
-    ctx.font = '11px Inter, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(name, p.x, p.y + r + 14);
-  });
 }
 
 function esc(s) {
