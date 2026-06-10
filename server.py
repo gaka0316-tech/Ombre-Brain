@@ -1824,6 +1824,169 @@ async def api_breath_debug(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+# ============================================================
+# REST API v2 — API Key 认证，供无 MCP 的客户端调用（如 Qwen）
+# 不影响现有 MCP 通道和 Dashboard cookie 认证
+# 环境变量 OMBRE_API_KEY 设置密钥，请求时通过 Authorization: Bearer <key> 或 ?key=<key> 传递
+# ============================================================
+
+def _require_api_key(request):
+    """Validate via dashboard cookie OR API key. Returns JSONResponse(401) or None."""
+    from starlette.responses import JSONResponse
+    # Dashboard users already logged in via cookie
+    if _is_authenticated(request):
+        return None
+    # External clients use API key
+    api_key = os.environ.get("OMBRE_API_KEY", "").strip()
+    if not api_key:
+        return JSONResponse({"error": "OMBRE_API_KEY not configured on server"}, status_code=500)
+    # Check Authorization header
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+        if token == api_key:
+            return None
+    # Check query param
+    if request.query_params.get("key", "") == api_key:
+        return None
+    return JSONResponse({"error": "Invalid API key"}, status_code=401)
+
+
+@mcp.custom_route("/api/v2/breath", methods=["POST", "GET"])
+async def api_v2_breath(request):
+    """REST wrapper for breath() — 检索/浮现记忆"""
+    from starlette.responses import JSONResponse
+    err = _require_api_key(request)
+    if err: return err
+    try:
+        if request.method == "POST":
+            body = await request.json()
+        else:
+            body = dict(request.query_params)
+        result = await breath(
+            query=body.get("query", ""),
+            max_tokens=int(body.get("max_tokens", 10000)),
+            domain=body.get("domain", ""),
+            event_type=body.get("event_type", ""),
+            valence=float(body.get("valence", -1)),
+            arousal=float(body.get("arousal", -1)),
+            max_results=int(body.get("max_results", 20)),
+            importance_min=int(body.get("importance_min", -1)),
+            after=body.get("after", ""),
+            before=body.get("before", ""),
+        )
+        return JSONResponse({"ok": True, "result": result})
+    except Exception as e:
+        logger.error(f"api_v2_breath error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@mcp.custom_route("/api/v2/hold", methods=["POST"])
+async def api_v2_hold(request):
+    """REST wrapper for hold() — 存储单条记忆"""
+    from starlette.responses import JSONResponse
+    err = _require_api_key(request)
+    if err: return err
+    try:
+        body = await request.json()
+        content = body.get("content", "")
+        if not content:
+            return JSONResponse({"error": "content is required"}, status_code=400)
+        result = await hold(
+            content=content,
+            tags=body.get("tags", ""),
+            importance=int(body.get("importance", 5)),
+            pinned=bool(body.get("pinned", False)),
+            feel=bool(body.get("feel", False)),
+            source_bucket=body.get("source_bucket", ""),
+            valence=float(body.get("valence", -1)),
+            arousal=float(body.get("arousal", -1)),
+            source=body.get("source", ""),
+        )
+        return JSONResponse({"ok": True, "result": result})
+    except Exception as e:
+        logger.error(f"api_v2_hold error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@mcp.custom_route("/api/v2/grow", methods=["POST"])
+async def api_v2_grow(request):
+    """REST wrapper for grow() — 日记归档"""
+    from starlette.responses import JSONResponse
+    err = _require_api_key(request)
+    if err: return err
+    try:
+        body = await request.json()
+        content = body.get("content", "")
+        if not content:
+            return JSONResponse({"error": "content is required"}, status_code=400)
+        result = await grow(content=content)
+        return JSONResponse({"ok": True, "result": result})
+    except Exception as e:
+        logger.error(f"api_v2_grow error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@mcp.custom_route("/api/v2/trace", methods=["POST"])
+async def api_v2_trace(request):
+    """REST wrapper for trace() — 修改记忆元数据"""
+    from starlette.responses import JSONResponse
+    err = _require_api_key(request)
+    if err: return err
+    try:
+        body = await request.json()
+        bucket_id = body.get("bucket_id", "")
+        if not bucket_id:
+            return JSONResponse({"error": "bucket_id is required"}, status_code=400)
+        result = await trace(
+            bucket_id=bucket_id,
+            resolved=int(body.get("resolved", -1)),
+            pinned=int(body.get("pinned", -1)),
+            digested=int(body.get("digested", -1)),
+            importance=int(body.get("importance", -1)),
+            content=body.get("content", ""),
+            name=body.get("name", ""),
+            tags=body.get("tags", ""),
+            domain=body.get("domain", ""),
+            valence=float(body.get("valence", -1)),
+            arousal=float(body.get("arousal", -1)),
+            delete=bool(body.get("delete", False)),
+        )
+        return JSONResponse({"ok": True, "result": result})
+    except Exception as e:
+        logger.error(f"api_v2_trace error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@mcp.custom_route("/api/v2/pulse", methods=["GET"])
+async def api_v2_pulse(request):
+    """REST wrapper for pulse() — 系统状态"""
+    from starlette.responses import JSONResponse
+    err = _require_api_key(request)
+    if err: return err
+    try:
+        include_archive = request.query_params.get("include_archive", "false").lower() == "true"
+        result = await pulse(include_archive=include_archive)
+        return JSONResponse({"ok": True, "result": result})
+    except Exception as e:
+        logger.error(f"api_v2_pulse error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@mcp.custom_route("/api/v2/dream", methods=["GET"])
+async def api_v2_dream(request):
+    """REST wrapper for dream() — 读取新增记忆桶"""
+    from starlette.responses import JSONResponse
+    err = _require_api_key(request)
+    if err: return err
+    try:
+        result = await dream()
+        return JSONResponse({"ok": True, "result": result})
+    except Exception as e:
+        logger.error(f"api_v2_dream error: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @mcp.custom_route("/dashboard", methods=["GET"])
 async def dashboard(request):
     """Serve the dashboard HTML page."""
