@@ -671,6 +671,7 @@
   <div class="tab" data-tab="config">配置</div>
   <div class="tab" data-tab="import">导入</div>
   <div class="tab" data-tab="settings">设置</div>
+  <div class="tab" data-tab="export">📤 导出</div>
 </div>
 
 <div class="content" id="list-view">
@@ -1043,6 +1044,41 @@
   </div>
 </div>
 
+<!-- Export Tab View — 记忆导出（给Qwen等无MCP客户端用） -->
+<div class="content" id="export-view" style="display:none">
+  <div style="max-width:640px;margin:0 auto;">
+    <div class="config-section">
+      <h3>🫁 记忆导出</h3>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:16px;">模拟呼吸，将记忆导出为文本。可粘贴到任何AI的system prompt中。</p>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+        <input type="text" id="export-query" placeholder="搜索关键词（留空=自动浮现）" style="flex:1;min-width:180px;padding:8px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface-solid);color:var(--text);font-size:13px;" />
+        <select id="export-filter" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface-solid);color:var(--text);font-size:13px;">
+          <option value="all">全部记忆</option>
+          <option value="pinned">📌 仅钉选</option>
+          <option value="important">⭐ 重要度≥8</option>
+        </select>
+        <select id="export-count" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface-solid);color:var(--text);font-size:13px;">
+          <option value="5">5条</option>
+          <option value="10" selected>10条</option>
+          <option value="15">15条</option>
+          <option value="20">20条</option>
+          <option value="30">30条</option>
+        </select>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        <button onclick="doExportBreath()" style="padding:10px 20px;border-radius:10px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-size:13px;cursor:pointer;">🫁 呼吸</button>
+        <button onclick="doExportCopy()" id="export-copy-btn" style="display:none;padding:10px 16px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;cursor:pointer;">📋 复制到剪贴板</button>
+        <button onclick="doExportDownload()" id="export-dl-btn" style="display:none;padding:10px 16px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;cursor:pointer;">📄 下载txt</button>
+      </div>
+
+      <div id="export-status" style="font-size:12px;color:var(--text-dim);margin-bottom:8px;"></div>
+      <pre id="export-result" style="display:none;background:var(--surface-solid);border:1px solid var(--border);border-radius:12px;padding:16px;font-size:12px;line-height:1.6;color:var(--text);white-space:pre-wrap;word-break:break-word;max-height:500px;overflow-y:auto;"></pre>
+    </div>
+  </div>
+</div>
+
 <!-- Auth Overlay -->
 <div id="auth-overlay" style="position:fixed;inset:0;z-index:9999;background:var(--bg-gradient);background-attachment:fixed;display:flex;align-items:center;justify-content:center;">
   <div style="background:var(--surface);backdrop-filter:blur(16px);border:1px solid var(--border);border-radius:24px;padding:48px 40px;max-width:400px;width:90%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,0.12);">
@@ -1285,6 +1321,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.getElementById('config-view').style.display = target === 'config' ? '' : 'none';
     document.getElementById('import-view').style.display = target === 'import' ? '' : 'none';
     document.getElementById('settings-view').style.display = target === 'settings' ? '' : 'none';
+    document.getElementById('export-view').style.display = target === 'export' ? '' : 'none';
     if (target === 'timeline') renderTimeline();
     if (target === 'network') loadNetwork();
     if (target === 'config') loadConfig();
@@ -2202,6 +2239,93 @@ async function batchReview(idsJson, action) {
     detectPatterns();
   } catch(e) {}
 }
+
+// ============================================================
+// 📤 Export — 记忆导出功能
+// ============================================================
+let _exportResult = '';
+
+async function doExportBreath() {
+  const query = document.getElementById('export-query').value.trim();
+  const filter = document.getElementById('export-filter').value;
+  const count = document.getElementById('export-count').value;
+  const statusEl = document.getElementById('export-status');
+  const resultEl = document.getElementById('export-result');
+
+  statusEl.textContent = '🫁 正在呼吸…';
+  resultEl.style.display = 'none';
+  document.getElementById('export-copy-btn').style.display = 'none';
+  document.getElementById('export-dl-btn').style.display = 'none';
+
+  let url = BASE + '/api/v2/breath';
+  const params = new URLSearchParams();
+  if (query) params.set('query', query);
+  params.set('max_results', count);
+  params.set('max_tokens', '8000');
+  if (filter === 'pinned') params.set('importance_min', '9');
+  if (filter === 'important') params.set('importance_min', '8');
+
+  try {
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: query,
+        max_results: parseInt(count),
+        max_tokens: 8000,
+        importance_min: filter === 'pinned' ? 9 : (filter === 'important' ? 8 : -1),
+      })
+    });
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Unknown error');
+
+    _exportResult = data.result;
+    resultEl.textContent = _exportResult;
+    resultEl.style.display = 'block';
+    document.getElementById('export-copy-btn').style.display = '';
+    document.getElementById('export-dl-btn').style.display = '';
+    statusEl.textContent = '✅ 呼吸完成';
+  } catch (e) {
+    statusEl.textContent = '❌ ' + e.message;
+    if (e.message.includes('401') || e.message.includes('Unauthorized')) {
+      statusEl.textContent = '❌ 需要先设置 OMBRE_API_KEY 环境变量，或确认已登录';
+    }
+  }
+}
+
+function doExportCopy() {
+  if (!_exportResult) return;
+  navigator.clipboard.writeText(_exportResult).then(() => {
+    const btn = document.getElementById('export-copy-btn');
+    const orig = btn.textContent;
+    btn.textContent = '✅ 已复制！';
+    setTimeout(() => btn.textContent = orig, 2000);
+  }).catch(() => {
+    // Fallback for older browsers
+    const ta = document.createElement('textarea');
+    ta.value = _exportResult;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    const btn = document.getElementById('export-copy-btn');
+    btn.textContent = '✅ 已复制！';
+    setTimeout(() => btn.textContent = '📋 复制到剪贴板', 2000);
+  });
+}
+
+function doExportDownload() {
+  if (!_exportResult) return;
+  const blob = new Blob([_exportResult], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const now = new Date().toISOString().slice(0, 10);
+  a.download = `蜜云阁记忆_${now}.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 </script>
 </body>
 </html>
