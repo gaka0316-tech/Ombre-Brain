@@ -2095,14 +2095,18 @@ async def api_config_update(request):
                 sc_dehy = save_config.setdefault("dehydration", {})
                 for key in ("model", "base_url", "max_tokens", "temperature"):
                     if key in body["dehydration"]:
-                        sc_dehy[key] = body["dehydration"][key]
+                        val = body["dehydration"][key]
+                        if val != "" and val is not None:
+                            sc_dehy[key] = val
                 # Never persist api_key to yaml (use env var)
 
             if "embedding" in body:
                 sc_emb = save_config.setdefault("embedding", {})
                 for key in ("enabled", "model"):
                     if key in body["embedding"]:
-                        sc_emb[key] = body["embedding"][key]
+                        val = body["embedding"][key]
+                        if val != "" and val is not None:
+                            sc_emb[key] = val
 
             if "merge_threshold" in body:
                 save_config["merge_threshold"] = int(body["merge_threshold"])
