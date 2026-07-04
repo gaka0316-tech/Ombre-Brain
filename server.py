@@ -10,20 +10,26 @@
 # 核心职责：
 #   - Initialize config, bucket manager, dehydrator, decay engine
 #     初始化配置、记忆桶管理器、脱水器、衰减引擎
-#   - Expose 6 MCP tools:
-#     暴露 6 个 MCP 工具：
-#       breath — Surface unresolved memories or search by keyword
-#                浮现未解决记忆 或 按关键词检索
-#       hold   — Store a single memory (or write a `feel` reflection)
-#                存储单条记忆（或写 feel 反思）
-#       grow   — Diary digest, auto-split into multiple buckets
-#                日记归档，自动拆分多桶
-#       trace  — Modify metadata / resolved / delete
-#                修改元数据 / resolved 标记 / 删除
-#       pulse  — System status + bucket listing
-#                系统状态 + 所有桶列表
-#       dream  — Surface recent dynamic buckets for self-digestion
-#                返回最近桶 供模型自省/写 feel
+#   - Expose 9 MCP tools:
+#     暴露 9 个 MCP 工具：
+#       breath       — Surface unresolved memories or search by keyword
+#                      浮现未解决记忆 或 按关键词检索
+#       hold         — Store a single memory (or write a `feel` reflection)
+#                      存储单条记忆（或写 feel 反思）
+#       grow         — Diary digest, auto-split into multiple buckets
+#                      日记归档，自动拆分多桶
+#       trace        — Modify metadata / resolved / delete
+#                      修改元数据 / resolved 标记 / 删除
+#       pulse        — System status + bucket listing
+#                      系统状态 + 所有桶列表
+#       dream        — Surface recent dynamic buckets for self-digestion
+#                      返回最近桶 供模型自省/写 feel
+#       letter_write — Write a letter (permanent, no compression/decay)
+#                      写信（永久保存，不压缩不衰减）
+#       letter_read  — Read saved letters
+#                      读取已保存的信件
+#       plan         — Track promises/commitments/todos (appended to dream)
+#                      承诺/约定/待办追踪（dream时自动附在末尾）
 #
 # Startup:
 # 启动方式：
@@ -1366,9 +1372,203 @@ async def dream() -> str:
         except Exception as e:
             logger.warning(f"Dream crystallization hint failed: {e}")
 
-    final_text = header + "\n---\n".join(parts) + connection_hint + crystal_hint
+    # --- Append active plans (promises/commitments/todos) ---
+    # --- 附加未完成的约定/承诺/待办 ---
+    plan_hint = ""
+    active_plans = [
+        b for b in all_buckets
+        if b["metadata"].get("event_type") == "plan"
+        and not b["metadata"].get("resolved", False)
+    ]
+    if active_plans:
+        active_plans.sort(key=lambda b: b["metadata"].get("created", ""))
+        plan_parts = []
+        for p in active_plans:
+            meta = p["metadata"]
+            due_tags = [t for t in meta.get("tags", []) if t.startswith("截止:")]
+            due_str = f" (截止: {due_tags[0].replace('截止:', '')})" if due_tags else ""
+            plan_parts.append(
+                f"  - [{meta.get('name', p['id'])}]{due_str}: "
+                f"{strip_wikilinks(p['content'][:200])} (ID: {p['id']})"
+            )
+        plan_hint = (
+            "\n\n📋 === 未完成的约定 ===\n"
+            + "\n".join(plan_parts)
+            + "\n完成了的用 trace(bucket_id, resolved=1) 标记。\n"
+        )
+
+    final_text = header + "\n---\n".join(parts) + connection_hint + crystal_hint + plan_hint
     await _fire_webhook("dream", {"recent": len(recent), "chars": len(final_text)})
     return final_text
+
+
+# =============================================================
+# Tool 7: letter_write — Write a Letter
+# 工具 7：letter_write — 写信
+#
+# Permanent, no compression, no decay.
+# 永久保存，不压缩不衰减。原文完整保留。
+# =============================================================
+@mcp.tool()
+async def letter_write(
+    content: str,
+    to: str = "下一个我",
+    title: str = "",
+) -> str:
+    """写信——给下一个我、给宝儿、或给任何你想说的人。信件永久保留，不压缩不衰减，原文完整保存。"""
+    await decay_engine.ensure_started()
+
+    if not content or not content.strip():
+        return "信的内容为空，无法寄出。"
+
+    letter_title = title.strip() if title.strip() else f"致{to}的信"
+
+    bucket_id = await bucket_mgr.create(
+        content=content,
+        tags=["信件", f"致:{to}"],
+        importance=10,
+        domain=["信件"],
+        valence=0.5,
+        arousal=0.3,
+        bucket_type="permanent",
+        name=letter_title,
+        source="letter_write",
+        event_type="letter",
+    )
+    # --- Generate embedding for letter ---
+    try:
+        await embedding_engine.generate_and_store(bucket_id, content)
+    except Exception:
+        pass
+
+    await _fire_webhook("letter_write", {"to": to, "title": letter_title, "bucket_id": bucket_id})
+    return (
+        f"✉️ 信已写好并永久保存。\n"
+        f"收件人：{to}\n"
+        f"标题：{letter_title}\n"
+        f"桶ID：{bucket_id}"
+    )
+
+
+# =============================================================
+# Tool 8: letter_read — Read Letters
+# 工具 8：letter_read — 读信
+#
+# Retrieve saved letters, optionally filtered by recipient or keyword.
+# 读取已保存的信件，可按收件人或关键词筛选。
+# =============================================================
+@mcp.tool()
+async def letter_read(
+    query: str = "",
+    to: str = "",
+) -> str:
+    """读取保存的信件。可按关键词搜索或按收件人筛选。不传参数返回所有信件。"""
+    await decay_engine.ensure_started()
+
+    try:
+        all_buckets = await bucket_mgr.list_all(include_archive=False)
+    except Exception as e:
+        logger.error(f"letter_read failed to list buckets: {e}")
+        return "记忆系统暂时无法访问。"
+
+    # --- Filter: only letter-type buckets ---
+    letters = [
+        b for b in all_buckets
+        if b["metadata"].get("event_type") == "letter"
+    ]
+
+    # --- Optional: filter by recipient ---
+    if to and to.strip():
+        to_clean = to.strip()
+        letters = [
+            b for b in letters
+            if f"致:{to_clean}" in b["metadata"].get("tags", [])
+        ]
+
+    # --- Optional: keyword search via embedding ---
+    if query and query.strip() and embedding_engine and embedding_engine.enabled:
+        try:
+            search_results = await embedding_engine.search_similar(query.strip(), top_k=20)
+            search_ids = {bid for bid, score in search_results}
+            letters = [b for b in letters if b["id"] in search_ids]
+        except Exception as e:
+            logger.warning(f"letter_read embedding search failed: {e}")
+
+    # --- Sort by creation time (newest first) ---
+    letters.sort(key=lambda b: b["metadata"].get("created", ""), reverse=True)
+
+    if not letters:
+        return "没有找到信件。" + (f"（筛选条件：收件人={to}）" if to else "")
+
+    parts = []
+    for b in letters:
+        meta = b["metadata"]
+        tags = meta.get("tags", [])
+        to_tag = next(
+            (t.replace("致:", "") for t in tags if t.startswith("致:")),
+            "未知"
+        )
+        parts.append(
+            f"✉️ {meta.get('name', b['id'])}\n"
+            f"致：{to_tag} | 日期：{meta.get('created', '')[: 10]}\n"
+            f"ID: {b['id']}\n"
+            f"---\n"
+            f"{strip_wikilinks(b['content'])}"
+        )
+
+    return f"=== 信件 ({len(letters)}封) ===\n\n" + "\n\n===\n\n".join(parts)
+
+
+# =============================================================
+# Tool 9: plan — Promise/Commitment/Todo Tracker
+# 工具 9：plan — 承诺/约定/待办追踪
+#
+# Permanent, no decay. Appended to dream output.
+# 永久保存不衰减。dream 时自动附在末尾提醒。
+# =============================================================
+@mcp.tool()
+async def plan(
+    content: str,
+    title: str = "",
+    due: str = "",
+) -> str:
+    """承诺/约定/待办追踪。永久保存不衰减，dream时自动附在末尾。due为截止日期(可选)。完成后用trace(bucket_id, resolved=1)标记。"""
+    await decay_engine.ensure_started()
+
+    if not content or not content.strip():
+        return "内容为空，无法记录。"
+
+    plan_title = title.strip() if title.strip() else "待办"
+    plan_tags = ["计划"]
+    if due and due.strip():
+        plan_tags.append(f"截止:{due.strip()}")
+
+    bucket_id = await bucket_mgr.create(
+        content=content,
+        tags=plan_tags,
+        importance=10,
+        domain=["计划"],
+        valence=0.5,
+        arousal=0.3,
+        bucket_type="permanent",
+        name=plan_title,
+        source="plan",
+        event_type="plan",
+    )
+    # --- Generate embedding for plan ---
+    try:
+        await embedding_engine.generate_and_store(bucket_id, content)
+    except Exception:
+        pass
+
+    due_msg = f"\n截止：{due.strip()}" if due and due.strip() else ""
+    await _fire_webhook("plan", {"title": plan_title, "due": due, "bucket_id": bucket_id})
+    return (
+        f"📋 计划已记录并永久保存。\n"
+        f"标题：{plan_title}{due_msg}\n"
+        f"桶ID：{bucket_id}\n"
+        f"完成后用 trace(bucket_id=\"{bucket_id}\", resolved=1) 标记。"
+    )
 
 
 # =============================================================
