@@ -1590,6 +1590,7 @@ async def api_buckets(request):
                 "id": b["id"],
                 "name": meta.get("name", b["id"]),
                 "type": meta.get("type", "dynamic"),
+                "event_type": meta.get("event_type", ""),
                 "domain": meta.get("domain", []),
                 "tags": meta.get("tags", []),
                 "valence": meta.get("valence", 0.5),
