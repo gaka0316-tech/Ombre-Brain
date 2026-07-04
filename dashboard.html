@@ -668,6 +668,8 @@
   <div class="tab" data-tab="timeline">时间线</div>
   <div class="tab" data-tab="breath">Breath 模拟</div>
   <div class="tab" data-tab="network">记忆网络</div>
+  <div class="tab" data-tab="letters">✉️ 信箱</div>
+  <div class="tab" data-tab="plans">📋 计划</div>
   <div class="tab" data-tab="config">配置</div>
   <div class="tab" data-tab="import">导入</div>
   <div class="tab" data-tab="settings">设置</div>
@@ -694,6 +696,20 @@
 
 <div class="content" id="timeline-view" style="display:none">
   <div id="timeline-content">
+    <div class="loading">加载中…</div>
+  </div>
+</div>
+
+<div class="content" id="letters-view" style="display:none">
+  <div style="margin-bottom:16px;color:var(--text-dim);font-size:13px;">永久保存的信件，不压缩不衰减。通过 <code>letter_write</code> 写信，<code>letter_read</code> 读信。</div>
+  <div id="letters-list">
+    <div class="loading">加载中…</div>
+  </div>
+</div>
+
+<div class="content" id="plans-view" style="display:none">
+  <div style="margin-bottom:16px;color:var(--text-dim);font-size:13px;">承诺/约定/待办追踪。通过 <code>plan</code> 创建，<code>trace(bucket_id, resolved=1)</code> 标记完成。</div>
+  <div id="plans-list">
     <div class="loading">加载中…</div>
   </div>
 </div>
@@ -1316,6 +1332,8 @@ document.querySelectorAll('.tab').forEach(tab => {
     const target = tab.dataset.tab;
     document.getElementById('list-view').style.display = target === 'list' ? '' : 'none';
     document.getElementById('timeline-view').style.display = target === 'timeline' ? '' : 'none';
+    document.getElementById('letters-view').style.display = target === 'letters' ? '' : 'none';
+    document.getElementById('plans-view').style.display = target === 'plans' ? '' : 'none';
     document.getElementById('breath-view').style.display = target === 'breath' ? '' : 'none';
     document.getElementById('network-view').style.display = target === 'network' ? '' : 'none';
     document.getElementById('config-view').style.display = target === 'config' ? '' : 'none';
@@ -1323,6 +1341,8 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.getElementById('settings-view').style.display = target === 'settings' ? '' : 'none';
     document.getElementById('export-view').style.display = target === 'export' ? '' : 'none';
     if (target === 'timeline') renderTimeline();
+    if (target === 'letters') renderLetters();
+    if (target === 'plans') renderPlans();
     if (target === 'network') loadNetwork();
     if (target === 'config') loadConfig();
     if (target === 'import') { pollImportStatus(); loadImportResults(); }
@@ -1516,6 +1536,69 @@ function renderTimeline() {
     });
     html += '</div>';
   });
+  el.innerHTML = html;
+}
+
+function renderLetters() {
+  var el = document.getElementById('letters-list');
+  var letters = allBuckets.filter(function(b) { return b.event_type === 'letter'; });
+  if (!letters.length) {
+    el.innerHTML = '<div class="loading" style="color:var(--text-dim);">还没有信件。用 <code>letter_write</code> 写第一封吧 ✉️</div>';
+    return;
+  }
+  letters.sort(function(a, b) { return (b.created || '').localeCompare(a.created || ''); });
+  var html = '';
+  letters.forEach(function(b) {
+    var to = '—';
+    (b.tags || []).forEach(function(t) { if (t.indexOf('致:') === 0) to = t.substring(2); });
+    var date = b.created ? b.created.substring(0, 10) : '';
+    html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px;cursor:pointer;" onclick="showDetail(\'' + b.id + '\')">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+        '<div style="font-size:16px;font-weight:600;color:var(--text);">✉️ ' + esc(b.name) + '</div>' +
+        '<div style="font-size:12px;color:var(--text-dim);">' + date + '</div>' +
+      '</div>' +
+      '<div style="font-size:12px;color:var(--accent);margin-bottom:10px;">致：' + esc(to) + '</div>' +
+      '<div style="font-size:14px;color:var(--text);line-height:1.7;white-space:pre-wrap;">' + esc(b.content_preview || '') + '</div>' +
+    '</div>';
+  });
+  el.innerHTML = '<div style="margin-bottom:12px;color:var(--text-dim);font-size:13px;">共 ' + letters.length + ' 封信</div>' + html;
+}
+
+function renderPlans() {
+  var el = document.getElementById('plans-list');
+  var plans = allBuckets.filter(function(b) { return b.event_type === 'plan'; });
+  if (!plans.length) {
+    el.innerHTML = '<div class="loading" style="color:var(--text-dim);">还没有计划。用 <code>plan</code> 创建第一个吧 📋</div>';
+    return;
+  }
+  var active = plans.filter(function(b) { return !b.resolved; });
+  var done = plans.filter(function(b) { return b.resolved; });
+  active.sort(function(a, b) { return (b.created || '').localeCompare(a.created || ''); });
+  done.sort(function(a, b) { return (b.created || '').localeCompare(a.created || ''); });
+  var html = '';
+  if (active.length) {
+    html += '<div style="margin-bottom:8px;font-size:14px;font-weight:600;color:var(--text);">⏳ 进行中（' + active.length + '）</div>';
+    active.forEach(function(b) {
+      var due = '';
+      (b.tags || []).forEach(function(t) { if (t.indexOf('截止:') === 0) due = ' · 截止: ' + t.substring(3); });
+      html += '<div style="background:var(--surface);border:1px solid var(--accent);border-radius:10px;padding:16px;margin-bottom:10px;cursor:pointer;" onclick="showDetail(\'' + b.id + '\')">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+          '<div style="font-size:14px;font-weight:500;color:var(--text);">📋 ' + esc(b.name) + '</div>' +
+          '<div style="font-size:11px;color:var(--text-dim);">' + (b.created || '').substring(0, 10) + due + '</div>' +
+        '</div>' +
+        '<div style="font-size:13px;color:var(--text);margin-top:8px;line-height:1.6;">' + esc(b.content_preview || '') + '</div>' +
+      '</div>';
+    });
+  }
+  if (done.length) {
+    html += '<div style="margin:20px 0 8px;font-size:14px;font-weight:600;color:var(--text-dim);">✅ 已完成（' + done.length + '）</div>';
+    done.forEach(function(b) {
+      html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px;opacity:0.6;cursor:pointer;" onclick="showDetail(\'' + b.id + '\')">' +
+        '<div style="font-size:14px;color:var(--text-dim);">✅ ' + esc(b.name) + '</div>' +
+        '<div style="font-size:13px;color:var(--text-dim);margin-top:6px;">' + esc(b.content_preview || '') + '</div>' +
+      '</div>';
+    });
+  }
   el.innerHTML = html;
 }
 
