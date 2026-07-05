@@ -1349,7 +1349,17 @@ document.querySelectorAll('.tab').forEach(tab => {
     if (target === 'timeline') renderTimeline();
     if (target === 'letters') renderLetters();
     if (target === 'plans') renderPlans();
-    if (target === 'network') loadNetwork();
+    if (target === 'network') {
+      if (networkLoaded && networkAnimateFn) {
+        networkAnimating = true;
+        networkAnimateFn();
+      } else {
+        loadNetwork();
+      }
+    } else if (networkAnimating) {
+      networkAnimating = false;
+      if (networkAnimId) { cancelAnimationFrame(networkAnimId); networkAnimId = null; }
+    }
     if (target === 'config') loadConfig();
     if (target === 'import') { pollImportStatus(); loadImportResults(); }
     if (target === 'settings') loadSettingsStatus();
@@ -1867,6 +1877,10 @@ async function createBucket() {
 
 var networkData = null;
 var brainRenderer = null;
+var networkAnimating = false;
+var networkAnimId = null;
+var networkLoaded = false;
+var networkAnimateFn = null;
 async function loadNetwork() {
   var container = document.getElementById('network-3d');
   container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#7ec8e3;font-size:14px;background:#080820;">加载记忆网络…</div>';
@@ -2094,9 +2108,11 @@ async function loadNetwork() {
     container.style.position = 'relative';
     container.appendChild(tooltip);
 
-    // --- Animation loop ---
+    // --- Animation loop (pausable) ---
+    networkAnimating = true;
     function animate() {
-      requestAnimationFrame(animate);
+      if (!networkAnimating) return;
+      networkAnimId = requestAnimationFrame(animate);
       if (autoRotate) rotY += 0.003;
       camera.position.x = Math.sin(rotY) * camDist;
       camera.position.y = Math.sin(rotX) * 80 + 20;
@@ -2105,7 +2121,9 @@ async function loadNetwork() {
       bgMat.opacity = 0.3 + Math.sin(Date.now() * 0.001) * 0.05;
       renderer.render(scene, camera);
     }
+    networkAnimateFn = animate;
     animate();
+    networkLoaded = true;
 
     // Resize
     window.addEventListener('resize', function() {
