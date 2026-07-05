@@ -1523,6 +1523,11 @@ async function batchAction(action) {
   }
 }
 
+var timelineMonthKeys = [];
+var timelineMonths = {};
+var timelineMonthPage = 0;
+var timelineMonthsPerPage = 3;
+
 function renderTimeline() {
   var el = document.getElementById('timeline-content');
   if (!allBuckets.length) {
@@ -1532,21 +1537,32 @@ function renderTimeline() {
   var sorted = allBuckets.slice().sort(function(a, b) {
     return (b.created || '').localeCompare(a.created || '');
   });
-  var months = {};
+  timelineMonths = {};
   sorted.forEach(function(b) {
     var d = b.created ? b.created.substring(0, 7) : '未知';
-    if (!months[d]) months[d] = [];
-    months[d].push(b);
+    if (!timelineMonths[d]) timelineMonths[d] = [];
+    timelineMonths[d].push(b);
   });
+  timelineMonthKeys = Object.keys(timelineMonths).sort().reverse();
+  timelineMonthPage = 1;
+  renderTimelinePage(el);
+}
+
+function renderTimelinePage(el) {
+  if (!el) el = document.getElementById('timeline-content');
+  var end = timelineMonthPage * timelineMonthsPerPage;
+  var visibleKeys = timelineMonthKeys.slice(0, end);
+  var hasMore = end < timelineMonthKeys.length;
+  var remaining = timelineMonthKeys.length - end;
   var html = '';
-  Object.keys(months).sort().reverse().forEach(function(m) {
+  visibleKeys.forEach(function(m) {
     var label = m;
     try {
       var parts = m.split('-');
       label = parts[0] + '年' + parseInt(parts[1]) + '月';
     } catch(e) {}
-    html += '<div class="timeline-month"><h3>' + label + ' (' + months[m].length + ')</h3>';
-    months[m].forEach(function(b) {
+    html += '<div class="timeline-month"><h3>' + label + ' (' + timelineMonths[m].length + ')</h3>';
+    timelineMonths[m].forEach(function(b) {
       var icon = b.pinned ? '📌' : b.type === 'feel' ? '🫧' : b.digested ? '🌿' : b.resolved ? '💤' : '💭';
       var day = b.created ? b.created.substring(8, 10) + '日' : '';
       html += '<div class="timeline-item" onclick="showDetail(\'' + b.id + '\')">' +
@@ -1560,19 +1576,41 @@ function renderTimeline() {
     });
     html += '</div>';
   });
+  html += hasMore ?
+    '<div class="load-more-btn" onclick="loadMoreTimeline()">加载更多月份（已显示 ' + visibleKeys.length + ' / ' + timelineMonthKeys.length + ' 个月，剩余 ' + remaining + '）</div>' :
+    '<div class="load-more-done">全部 ' + timelineMonthKeys.length + ' 个月已显示 ✓</div>';
   el.innerHTML = html;
 }
 
+function loadMoreTimeline() {
+  timelineMonthPage++;
+  renderTimelinePage();
+}
+
+var allLetters = [];
+var lettersPage = 1;
+var lettersPerPage = 10;
+
 function renderLetters() {
   var el = document.getElementById('letters-list');
-  var letters = allBuckets.filter(function(b) { return b.event_type === 'letter'; });
-  if (!letters.length) {
+  allLetters = allBuckets.filter(function(b) { return b.event_type === 'letter'; });
+  if (!allLetters.length) {
     el.innerHTML = '<div class="loading" style="color:var(--text-dim);">还没有信件。用 <code>letter_write</code> 写第一封吧 ✉️</div>';
     return;
   }
-  letters.sort(function(a, b) { return (b.created || '').localeCompare(a.created || ''); });
-  var html = '';
-  letters.forEach(function(b) {
+  allLetters.sort(function(a, b) { return (b.created || '').localeCompare(a.created || ''); });
+  lettersPage = 1;
+  renderLettersPage(el);
+}
+
+function renderLettersPage(el) {
+  if (!el) el = document.getElementById('letters-list');
+  var end = lettersPage * lettersPerPage;
+  var visible = allLetters.slice(0, end);
+  var hasMore = end < allLetters.length;
+  var remaining = allLetters.length - end;
+  var html = '<div style="margin-bottom:12px;color:var(--text-dim);font-size:13px;">共 ' + allLetters.length + ' 封信</div>';
+  visible.forEach(function(b) {
     var to = '—';
     (b.tags || []).forEach(function(t) { if (t.indexOf('致:') === 0) to = t.substring(2); });
     var date = b.created ? b.created.substring(0, 10) : '';
@@ -1585,8 +1623,20 @@ function renderLetters() {
       '<div style="font-size:14px;color:var(--text);line-height:1.7;white-space:pre-wrap;">' + esc(b.content_preview || '') + '</div>' +
     '</div>';
   });
-  el.innerHTML = '<div style="margin-bottom:12px;color:var(--text-dim);font-size:13px;">共 ' + letters.length + ' 封信</div>' + html;
+  html += hasMore ?
+    '<div class="load-more-btn" onclick="loadMoreLetters()">加载更多信件（已显示 ' + visible.length + ' / ' + allLetters.length + '，剩余 ' + remaining + ' 封）</div>' :
+    '<div class="load-more-done">全部 ' + allLetters.length + ' 封信已显示 ✓</div>';
+  el.innerHTML = html;
 }
+
+function loadMoreLetters() {
+  lettersPage++;
+  renderLettersPage();
+}
+
+var allDonePlans = [];
+var donePlansPage = 1;
+var donePlansPerPage = 10;
 
 function renderPlans() {
   var el = document.getElementById('plans-list');
@@ -1596,9 +1646,10 @@ function renderPlans() {
     return;
   }
   var active = plans.filter(function(b) { return !b.resolved; });
-  var done = plans.filter(function(b) { return b.resolved; });
+  allDonePlans = plans.filter(function(b) { return b.resolved; });
   active.sort(function(a, b) { return (b.created || '').localeCompare(a.created || ''); });
-  done.sort(function(a, b) { return (b.created || '').localeCompare(a.created || ''); });
+  allDonePlans.sort(function(a, b) { return (b.created || '').localeCompare(a.created || ''); });
+  donePlansPage = 1;
   var html = '';
   if (active.length) {
     html += '<div style="margin-bottom:8px;font-size:14px;font-weight:600;color:var(--text);">⏳ 进行中（' + active.length + '）</div>';
@@ -1614,16 +1665,39 @@ function renderPlans() {
       '</div>';
     });
   }
-  if (done.length) {
-    html += '<div style="margin:20px 0 8px;font-size:14px;font-weight:600;color:var(--text-dim);">✅ 已完成（' + done.length + '）</div>';
-    done.forEach(function(b) {
-      html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px;opacity:0.6;cursor:pointer;" onclick="showDetail(\'' + b.id + '\')">' +
-        '<div style="font-size:14px;color:var(--text-dim);">✅ ' + esc(b.name) + '</div>' +
-        '<div style="font-size:13px;color:var(--text-dim);margin-top:6px;">' + esc(b.content_preview || '') + '</div>' +
-      '</div>';
-    });
-  }
   el.innerHTML = html;
+  renderDonePlans(el);
+}
+
+function renderDonePlans(el) {
+  if (!el) el = document.getElementById('plans-list');
+  if (!allDonePlans.length) return;
+  var end = donePlansPage * donePlansPerPage;
+  var visible = allDonePlans.slice(0, end);
+  var hasMore = end < allDonePlans.length;
+  var remaining = allDonePlans.length - end;
+  var doneEl = document.getElementById('plans-done-section');
+  if (!doneEl) {
+    doneEl = document.createElement('div');
+    doneEl.id = 'plans-done-section';
+    el.appendChild(doneEl);
+  }
+  var html = '<div style="margin:20px 0 8px;font-size:14px;font-weight:600;color:var(--text-dim);">✅ 已完成（' + allDonePlans.length + '）</div>';
+  visible.forEach(function(b) {
+    html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px;opacity:0.6;cursor:pointer;" onclick="showDetail(\'' + b.id + '\')">' +
+      '<div style="font-size:14px;color:var(--text-dim);">✅ ' + esc(b.name) + '</div>' +
+      '<div style="font-size:13px;color:var(--text-dim);margin-top:6px;">' + esc(b.content_preview || '') + '</div>' +
+    '</div>';
+  });
+  html += hasMore ?
+    '<div class="load-more-btn" onclick="loadMoreDonePlans()">加载更多已完成（已显示 ' + visible.length + ' / ' + allDonePlans.length + '，剩余 ' + remaining + '）</div>' :
+    '<div class="load-more-done">全部 ' + allDonePlans.length + ' 个已完成 ✓</div>';
+  doneEl.innerHTML = html;
+}
+
+function loadMoreDonePlans() {
+  donePlansPage++;
+  renderDonePlans();
 }
 
 async function searchBuckets(query) {
