@@ -152,6 +152,9 @@
   }
 
   .bucket-list { display: flex; flex-direction: column; gap: 8px; }
+  .load-more-btn { text-align: center; padding: 14px; margin-top: 8px; background: linear-gradient(135deg, #e8dfd0, #d4c9b8); border-radius: 10px; cursor: pointer; color: #6b5e4f; font-size: 14px; font-weight: 500; transition: all 0.2s; }
+  .load-more-btn:hover { background: linear-gradient(135deg, #d4c9b8, #c5b9a8); transform: translateY(-1px); }
+  .load-more-done { text-align: center; padding: 10px; margin-top: 8px; color: #a09080; font-size: 13px; }
   .bucket-row {
     display: grid;
     grid-template-columns: 32px 200px 100px 80px 60px 100px 1fr;
@@ -1324,6 +1327,9 @@ async function authFetch(url, options) {
 const BASE = location.origin;
 let allBuckets = [];
 let currentFilter = 'all';
+let pageSize = 50;
+let currentPage = 1;
+let currentDisplayBuckets = [];
 
 document.querySelectorAll('.tab').forEach(tab => {
   tab.addEventListener('click', () => {
@@ -1429,12 +1435,23 @@ function filterBuckets(buckets) {
 }
 
 function renderBuckets(buckets) {
+  currentDisplayBuckets = buckets;
+  currentPage = 1;
+  renderPage();
+}
+
+function renderPage() {
   var list = document.getElementById('bucket-list');
+  var buckets = currentDisplayBuckets;
   if (!buckets.length) {
     list.innerHTML = '<div class="loading">没有记忆桶</div>';
     return;
   }
-  list.innerHTML = buckets.map(function(b) {
+  var end = currentPage * pageSize;
+  var visible = buckets.slice(0, end);
+  var hasMore = end < buckets.length;
+  var remaining = buckets.length - end;
+  list.innerHTML = visible.map(function(b) {
     var icon = b.pinned ? '📌' : b.type === 'feel' ? '🫧' : b.digested ? '🌿' : b.resolved ? '💤' : '💭';
     var vPos = Math.round(b.valence * 100);
     var modelV = b.model_valence != null ? ' → V' + b.model_valence.toFixed(1) : '';
@@ -1450,7 +1467,14 @@ function renderBuckets(buckets) {
       '<span class="time">' + timeAgo + '</span>' +
       '<span class="preview">' + esc(b.content_preview) + '</span>' +
     '</div>';
-  }).join('');
+  }).join('') + (hasMore ?
+    '<div class="load-more-btn" onclick="loadMoreBuckets()">加载更多（已显示 ' + visible.length + ' / ' + buckets.length + '，剩余 ' + remaining + ' 条）</div>' :
+    '<div class="load-more-done">全部 ' + buckets.length + ' 条已显示 ✓</div>');
+}
+
+function loadMoreBuckets() {
+  currentPage++;
+  renderPage();
 }
 
 var batchMode = false;
@@ -1791,7 +1815,7 @@ async function loadNetwork() {
     camera.position.set(0, 20, 220);
     var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     renderer.setSize(W, H);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer.setClearColor(0x050515);
     container.appendChild(renderer.domElement);
 
@@ -1845,7 +1869,7 @@ async function loadNetwork() {
     }
 
     // --- Background brain particles (surface) ---
-    var bgCount = 4000;
+    var bgCount = 2000;
     var bgPositions = new Float32Array(bgCount * 3);
     for (var i = 0; i < bgCount; i++) {
       var p = brainSurface(Math.random(), Math.random());
@@ -1864,7 +1888,7 @@ async function loadNetwork() {
     scene.add(new THREE.Points(bgGeo, bgMat));
 
     // --- Inner glow layer ---
-    var innerCount = 2000;
+    var innerCount = 800;
     var innerPos = new Float32Array(innerCount * 3);
     for (var i = 0; i < innerCount; i++) {
       var p = brainSurface(Math.random(), Math.random());
@@ -1882,11 +1906,13 @@ async function loadNetwork() {
     });
     scene.add(new THREE.Points(innerGeo, innerMat));
 
-    // --- Memory nodes ---
+    // --- Memory nodes (batched by type) ---
     var typeTextures = { dynamic: texNode, permanent: texPerm, feel: texFeel, archived: texNode };
     var typeColors = { dynamic: 0x4fc3f7, permanent: 0xffd54f, feel: 0xef9a9a, archived: 0x90a4ae };
     var nodePositions = [];
 
+    // Group nodes by type
+    var nodesByType = {};
     networkData.nodes.forEach(function(n, i) {
       var u = (i / networkData.nodes.length) + Math.random() * 0.05;
       var p = brainSurface(u % 1, Math.random());
@@ -1894,36 +1920,53 @@ async function loadNetwork() {
       p.y += (Math.random()-0.5) * 3;
       p.z += (Math.random()-0.5) * 3;
       nodePositions.push({ id: n.id, x: p.x, y: p.y, z: p.z });
-
-      var nGeo = new THREE.BufferGeometry();
-      nGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array([p.x, p.y, p.z]), 3));
-      var nMat = new THREE.PointsMaterial({
-        map: typeTextures[n.type] || texNode,
-        size: Math.max(3, Math.min(8, (n.score || 5) * 0.4)),
-        transparent: true, blending: THREE.AdditiveBlending,
-        depthWrite: false, opacity: 0.9,
-        color: typeColors[n.type] || 0x4fc3f7
-      });
-      scene.add(new THREE.Points(nGeo, nMat));
+      var t = n.type || 'dynamic';
+      if (!nodesByType[t]) nodesByType[t] = [];
+      nodesByType[t].push({ pos: p, score: n.score || 5 });
     });
 
-    // --- Connection lines ---
+    // Create one Points object per type (4 objects instead of 453)
+    Object.keys(nodesByType).forEach(function(type) {
+      var group = nodesByType[type];
+      var positions = new Float32Array(group.length * 3);
+      var sizes = new Float32Array(group.length);
+      group.forEach(function(item, i) {
+        positions[i*3] = item.pos.x;
+        positions[i*3+1] = item.pos.y;
+        positions[i*3+2] = item.pos.z;
+        sizes[i] = Math.max(3, Math.min(8, item.score * 0.4));
+      });
+      var geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      var avgSize = sizes.reduce(function(a,b){return a+b;},0) / sizes.length;
+      var mat = new THREE.PointsMaterial({
+        map: typeTextures[type] || texNode,
+        size: avgSize,
+        transparent: true, blending: THREE.AdditiveBlending,
+        depthWrite: false, opacity: 0.9,
+        color: typeColors[type] || 0x4fc3f7
+      });
+      scene.add(new THREE.Points(geo, mat));
+    });
+
+    // --- Connection lines (single batched LineSegments) ---
     var posMap = {};
     nodePositions.forEach(function(np) { posMap[np.id] = np; });
+    var edgeVerts = [];
     networkData.edges.forEach(function(e) {
       var a = posMap[e.source], b = posMap[e.target];
       if (!a || !b) return;
-      var lGeo = new THREE.BufferGeometry();
-      lGeo.setAttribute('position', new THREE.BufferAttribute(
-        new Float32Array([a.x, a.y, a.z, b.x, b.y, b.z]), 3
-      ));
-      var lMat = new THREE.LineBasicMaterial({
-        color: 0x3388ff, transparent: true,
-        opacity: Math.max(0.03, (e.similarity || 0.5) * 0.12),
-        blending: THREE.AdditiveBlending
-      });
-      scene.add(new THREE.Line(lGeo, lMat));
+      edgeVerts.push(a.x, a.y, a.z, b.x, b.y, b.z);
     });
+    if (edgeVerts.length) {
+      var edgeGeo = new THREE.BufferGeometry();
+      edgeGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(edgeVerts), 3));
+      var edgeMat = new THREE.LineBasicMaterial({
+        color: 0x3388ff, transparent: true,
+        opacity: 0.06, blending: THREE.AdditiveBlending
+      });
+      scene.add(new THREE.LineSegments(edgeGeo, edgeMat));
+    }
 
     // --- Floating dust ---
     var dustCount = 300;
