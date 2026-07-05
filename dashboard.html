@@ -1350,13 +1350,9 @@ document.querySelectorAll('.tab').forEach(tab => {
     if (target === 'letters') renderLetters();
     if (target === 'plans') renderPlans();
     if (target === 'network') {
-      if (networkLoaded) {
-        startAutoSpin();
-      } else {
-        loadNetwork();
-      }
+      loadNetwork();
     } else {
-      stopAutoSpin();
+      destroyNetwork();
     }
     if (target === 'config') loadConfig();
     if (target === 'import') { pollImportStatus(); loadImportResults(); }
@@ -1878,6 +1874,18 @@ var brainRenderer = null;
 var networkLoaded = false;
 var startAutoSpin = function(){};
 var stopAutoSpin = function(){};
+
+function destroyNetwork() {
+  stopAutoSpin();
+  var container = document.getElementById('network-3d');
+  if (brainRenderer) {
+    brainRenderer.dispose();
+    brainRenderer.forceContextLoss();
+    brainRenderer = null;
+  }
+  if (container) container.innerHTML = '';
+  networkLoaded = false;
+}
 async function loadNetwork() {
   var container = document.getElementById('network-3d');
   container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#7ec8e3;font-size:14px;background:#080820;">加载记忆网络…</div>';
