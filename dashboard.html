@@ -1350,15 +1350,13 @@ document.querySelectorAll('.tab').forEach(tab => {
     if (target === 'letters') renderLetters();
     if (target === 'plans') renderPlans();
     if (target === 'network') {
-      if (networkLoaded && networkAnimateFn) {
-        networkAnimating = true;
-        networkAnimateFn();
+      if (networkLoaded) {
+        startAutoSpin();
       } else {
         loadNetwork();
       }
-    } else if (networkAnimating) {
-      networkAnimating = false;
-      if (networkAnimId) { cancelAnimationFrame(networkAnimId); networkAnimId = null; }
+    } else {
+      stopAutoSpin();
     }
     if (target === 'config') loadConfig();
     if (target === 'import') { pollImportStatus(); loadImportResults(); }
@@ -1877,10 +1875,9 @@ async function createBucket() {
 
 var networkData = null;
 var brainRenderer = null;
-var networkAnimating = false;
-var networkAnimId = null;
 var networkLoaded = false;
-var networkAnimateFn = null;
+var startAutoSpin = function(){};
+var stopAutoSpin = function(){};
 async function loadNetwork() {
   var container = document.getElementById('network-3d');
   container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#7ec8e3;font-size:14px;background:#080820;">加载记忆网络…</div>';
@@ -2073,33 +2070,44 @@ async function loadNetwork() {
     });
     scene.add(new THREE.Points(dustGeo, dustMat));
 
-    // --- Mouse/touch rotation ---
+    // --- Render function (on-demand, no animation loop) ---
+    function renderOnce() {
+      camera.position.x = Math.sin(rotY) * camDist;
+      camera.position.y = Math.sin(rotX) * 80 + 20;
+      camera.position.z = Math.cos(rotY) * camDist;
+      camera.lookAt(0, 0, 0);
+      renderer.render(scene, camera);
+    }
+
+    // --- Mouse/touch rotation (renders only on interaction) ---
     var isDragging = false, prevX = 0, prevY = 0;
     var rotY = 0, rotX = 0.15, camDist = 220;
-    var autoRotate = true;
 
-    container.addEventListener('mousedown', function(ev) { isDragging = true; autoRotate = false; frameBudget = 33; prevX = ev.clientX; prevY = ev.clientY; });
+    container.addEventListener('mousedown', function(ev) { isDragging = true; prevX = ev.clientX; prevY = ev.clientY; stopAutoSpin(); });
     container.addEventListener('mousemove', function(ev) {
       if (!isDragging) return;
       rotY += (ev.clientX - prevX) * 0.005;
       rotX += (ev.clientY - prevY) * 0.005;
       rotX = Math.max(-1.2, Math.min(1.2, rotX));
       prevX = ev.clientX; prevY = ev.clientY;
+      renderOnce();
     });
-    container.addEventListener('mouseup', function() { isDragging = false; frameBudget = 66; });
-    container.addEventListener('mouseleave', function() { isDragging = false; frameBudget = 66; });
-    container.addEventListener('touchstart', function(ev) { isDragging = true; autoRotate = false; frameBudget = 33; prevX = ev.touches[0].clientX; prevY = ev.touches[0].clientY; });
+    container.addEventListener('mouseup', function() { isDragging = false; });
+    container.addEventListener('mouseleave', function() { isDragging = false; });
+    container.addEventListener('touchstart', function(ev) { isDragging = true; prevX = ev.touches[0].clientX; prevY = ev.touches[0].clientY; stopAutoSpin(); });
     container.addEventListener('touchmove', function(ev) {
       if (!isDragging) return;
       rotY += (ev.touches[0].clientX - prevX) * 0.005;
       rotX += (ev.touches[0].clientY - prevY) * 0.005;
       rotX = Math.max(-1.2, Math.min(1.2, rotX));
       prevX = ev.touches[0].clientX; prevY = ev.touches[0].clientY;
+      renderOnce();
     });
-    container.addEventListener('touchend', function() { isDragging = false; frameBudget = 66; });
+    container.addEventListener('touchend', function() { isDragging = false; });
     container.addEventListener('wheel', function(ev) {
       ev.preventDefault();
       camDist = Math.max(100, Math.min(500, camDist + ev.deltaY * 0.3));
+      renderOnce();
     }, { passive: false });
 
     // --- Tooltip ---
@@ -2108,25 +2116,22 @@ async function loadNetwork() {
     container.style.position = 'relative';
     container.appendChild(tooltip);
 
-    // --- Animation loop (pausable, throttled to ~15fps) ---
-    networkAnimating = true;
-    var lastFrameTime = 0;
-    var frameBudget = 66; // ms per frame, ~15fps (enough for slow rotation)
-    function animate(now) {
-      if (!networkAnimating) return;
-      networkAnimId = requestAnimationFrame(animate);
-      if (now - lastFrameTime < frameBudget) return;
-      lastFrameTime = now;
-      if (autoRotate) rotY += 0.003 * (frameBudget / 16.7);
-      camera.position.x = Math.sin(rotY) * camDist;
-      camera.position.y = Math.sin(rotX) * 80 + 20;
-      camera.position.z = Math.cos(rotY) * camDist;
-      camera.lookAt(0, 0, 0);
-      bgMat.opacity = 0.3 + Math.sin(Date.now() * 0.001) * 0.05;
-      renderer.render(scene, camera);
+    // --- Ultra-low-freq auto spin (1 frame every 2s, stops on drag) ---
+    var autoSpinTimer = null;
+    function startAutoSpin() {
+      if (autoSpinTimer) return;
+      autoSpinTimer = setInterval(function() {
+        rotY += 0.006;
+        renderOnce();
+      }, 2000);
     }
-    networkAnimateFn = animate;
-    animate();
+    function stopAutoSpin() {
+      if (autoSpinTimer) { clearInterval(autoSpinTimer); autoSpinTimer = null; }
+    }
+
+    // Initial render + start gentle spin
+    renderOnce();
+    startAutoSpin();
     networkLoaded = true;
 
     // Resize
@@ -2136,6 +2141,7 @@ async function loadNetwork() {
         camera.aspect = W / H;
         camera.updateProjectionMatrix();
         renderer.setSize(W, H);
+        renderOnce();
       }
     });
 
