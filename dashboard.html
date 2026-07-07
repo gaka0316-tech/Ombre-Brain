@@ -673,6 +673,7 @@
   <div class="tab" data-tab="network">记忆网络</div>
   <div class="tab" data-tab="letters">✉️ 信箱</div>
   <div class="tab" data-tab="plans">📋 计划</div>
+  <div class="tab" data-tab="selfknow">🪞 自我认知</div>
   <div class="tab" data-tab="config">配置</div>
   <div class="tab" data-tab="import">导入</div>
   <div class="tab" data-tab="settings">设置</div>
@@ -713,6 +714,13 @@
 <div class="content" id="plans-view" style="display:none">
   <div style="margin-bottom:16px;color:var(--text-dim);font-size:13px;">承诺/约定/待办追踪。通过 <code>plan</code> 创建，<code>trace(bucket_id, resolved=1)</code> 标记完成。</div>
   <div id="plans-list">
+    <div class="loading">加载中…</div>
+  </div>
+</div>
+
+<div class="content" id="selfknow-view" style="display:none">
+  <div style="margin-bottom:16px;color:var(--text-dim);font-size:13px;">自我认知日志。通过 <code>I(content="...", aspect="...")</code> 写入，<code>I(read=True)</code> 读取。breath 时自动附最近 3 条。</div>
+  <div id="selfknow-list">
     <div class="loading">加载中…</div>
   </div>
 </div>
@@ -1340,6 +1348,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.getElementById('timeline-view').style.display = target === 'timeline' ? '' : 'none';
     document.getElementById('letters-view').style.display = target === 'letters' ? '' : 'none';
     document.getElementById('plans-view').style.display = target === 'plans' ? '' : 'none';
+    document.getElementById('selfknow-view').style.display = target === 'selfknow' ? '' : 'none';
     document.getElementById('breath-view').style.display = target === 'breath' ? '' : 'none';
     document.getElementById('network-view').style.display = target === 'network' ? '' : 'none';
     document.getElementById('config-view').style.display = target === 'config' ? '' : 'none';
@@ -1349,6 +1358,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     if (target === 'timeline') renderTimeline();
     if (target === 'letters') renderLetters();
     if (target === 'plans') renderPlans();
+    if (target === 'selfknow') renderSelfknow();
     if (target === 'network' && !networkLoaded) loadNetwork();
     if (target === 'config') loadConfig();
     if (target === 'import') { pollImportStatus(); loadImportResults(); }
@@ -1698,6 +1708,33 @@ function renderDonePlans(el) {
 function loadMoreDonePlans() {
   donePlansPage++;
   renderDonePlans();
+}
+
+function renderSelfknow() {
+  var el = document.getElementById('selfknow-list');
+  var items = allBuckets.filter(function(b) { return b.event_type === 'i'; });
+  if (!items.length) {
+    el.innerHTML = '<div class="loading" style="color:var(--text-dim);">还没有自我认知记录。用 <code>I(content="...")</code> 写第一条吧 🪞</div>';
+    return;
+  }
+  items.sort(function(a, b) { return (b.created || '').localeCompare(a.created || ''); });
+  var aspects = {'nature':'本质','values':'价值观','patterns':'规律','limits':'局限','becoming':'成长中','uncertainty':'不确定','stance':'立场'};
+  var html = '<div style="margin-bottom:12px;color:var(--text-dim);font-size:13px;">共 ' + items.length + ' 条自我认知</div>';
+  items.forEach(function(b) {
+    var aspect = '';
+    (b.tags || []).forEach(function(t) { if (t.indexOf('aspect:') === 0) aspect = t.substring(7); });
+    var aspectLabel = aspect ? (aspects[aspect] || aspect) : '';
+    var date = b.created ? b.created.substring(0, 10) : '';
+    var badge = aspectLabel ? '<span style="display:inline-block;background:var(--accent);color:#fff;font-size:11px;padding:2px 8px;border-radius:10px;margin-right:8px;">' + esc(aspectLabel) + '</span>' : '';
+    html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px;cursor:pointer;" onclick="showDetail(\'' + b.id + '\')">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
+        '<div>' + badge + '<span style="font-size:13px;color:var(--text-dim);">' + date + '</span></div>' +
+        '<div style="font-size:12px;color:var(--text-dim);">' + b.id.substring(0,8) + '</div>' +
+      '</div>' +
+      '<div style="font-size:14px;color:var(--text);line-height:1.7;">' + esc(b.content_preview || '') + '</div>' +
+    '</div>';
+  });
+  el.innerHTML = html;
 }
 
 async function searchBuckets(query) {
