@@ -1664,6 +1664,15 @@ async def I(
     if aspect and aspect.strip():
         i_tags.append(f"aspect:{aspect.strip()}")
 
+    # --- Auto-generate name from content ---
+    raw_name = content.strip().replace("\n", " ")
+    if len(raw_name) > 20:
+        # Cut at last whole word within 20 chars
+        cut = raw_name[:20].rsplit(" ", 1)[0] or raw_name[:20]
+        auto_name = cut.rstrip("，。、！？,.:;") + "…"
+    else:
+        auto_name = raw_name
+
     bucket_id = await bucket_mgr.create(
         content=content.strip(),
         tags=i_tags,
@@ -1672,7 +1681,7 @@ async def I(
         valence=0.5,
         arousal=0.3,
         bucket_type="permanent",
-        name=None,
+        name=auto_name,
         source="I",
         event_type="i",
     )
