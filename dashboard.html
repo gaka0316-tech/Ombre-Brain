@@ -1372,7 +1372,7 @@ document.getElementById('search-input').addEventListener('input', (e) => {
   const q = e.target.value.trim();
   searchTimer = setTimeout(() => {
     if (q) searchBuckets(q);
-    else renderBuckets(allBuckets);
+    else renderBuckets(filterBuckets(allBuckets));
   }, 300);
 });
 
@@ -1386,7 +1386,7 @@ async function loadBuckets() {
     allBuckets = data;
     updateStats();
     buildFilters();
-    renderBuckets(allBuckets);
+    renderBuckets(filterBuckets(allBuckets));
   } catch (e) {
     document.getElementById('bucket-list').innerHTML = '<div class="loading">加载失败: ' + e.message + '</div>';
   }
@@ -1494,7 +1494,7 @@ function toggleBatchMode() {
   var bar = document.getElementById('batch-bar');
   btn.textContent = batchMode ? '✕ 退出批量' : '☑ 批量';
   if (batchMode) { bar.classList.add('active'); } else { bar.classList.remove('active'); }
-  renderBuckets(allBuckets);
+  renderBuckets(filterBuckets(allBuckets));
 }
 
 function updateBatchCount() {
