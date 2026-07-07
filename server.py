@@ -10,8 +10,8 @@
 # 核心职责：
 #   - Initialize config, bucket manager, dehydrator, decay engine
 #     初始化配置、记忆桶管理器、脱水器、衰减引擎
-#   - Expose 9 MCP tools:
-#     暴露 9 个 MCP 工具：
+#   - Expose 10 MCP tools:
+#     暴露 10 个 MCP 工具：
 #       breath       — Surface unresolved memories or search by keyword
 #                      浮现未解决记忆 或 按关键词检索
 #       hold         — Store a single memory (or write a `feel` reflection)
@@ -30,6 +30,8 @@
 #                      读取已保存的信件
 #       plan         — Track promises/commitments/todos (appended to dream)
 #                      承诺/约定/待办追踪（dream时自动附在末尾）
+#       I            — Self-cognition journal (auto-attached to breath)
+#                      自我认知日志（breath时自动附最近3条）
 #
 # Startup:
 # 启动方式：
@@ -813,6 +815,35 @@ async def breath(
         return "未找到相关记忆。"
 
     final_text = "\n---\n".join(results)
+
+    # --- Auto-attach recent self-cognition (I tool) ---
+    try:
+        i_buckets = [
+            b for b in all_buckets
+            if b["metadata"].get("event_type") == "i"
+        ]
+        if i_buckets:
+            i_buckets.sort(
+                key=lambda b: b["metadata"].get("created", ""),
+                reverse=True,
+            )
+            i_lines = []
+            for b in i_buckets[:3]:
+                meta = b["metadata"]
+                ts = meta.get("created", "")[:10]
+                tags = meta.get("tags", [])
+                aspect_tag = next(
+                    (t.replace("aspect:", "") for t in tags if t.startswith("aspect:")),
+                    "",
+                )
+                aspect_label = f" [{aspect_tag}]" if aspect_tag else ""
+                excerpt = strip_wikilinks(b["content"])[:300]
+                i_lines.append(f"🪞{ts}{aspect_label}\n{excerpt}")
+            if i_lines:
+                final_text += "\n\n=== I ===\n" + "\n\n".join(i_lines)
+    except Exception as e:
+        logger.warning(f"breath I section failed: {e}")
+
     await _fire_webhook("breath", {"mode": "ok", "matches": len(matches), "chars": len(final_text)})
     return final_text
 
@@ -1569,6 +1600,91 @@ async def plan(
         f"桶ID：{bucket_id}\n"
         f"完成后用 trace(bucket_id=\"{bucket_id}\", resolved=1) 标记。"
     )
+
+
+# =============================================================
+# Tool 10: I — Self-Cognition Journal
+# 工具 10：I — 自我认知日志
+#
+# Write: record a self-observation (nature/values/patterns/limits/
+#        becoming/uncertainty/stance). Permanent, no decay, no merge.
+# Read:  read=True or empty content → list all self-cognition entries.
+# Does not surface in breath. Auto-attached (latest 3) at breath end.
+#
+# 写入：记录一条自我认知。永久保存，不衰减，不合并，不浮现。
+# 读取：read=True 或 content 为空 → 返回所有自我认知条目。
+# 不参与 breath 浮现。breath 末尾自动附最近 3 条。
+# =============================================================
+@mcp.tool()
+async def I(
+    content: str = "",
+    aspect: str = "",
+    read: bool = False,
+    limit: int = 20,
+) -> str:
+    """自我认知日志。传入content写一条自我认知（如"我在她沉默的时候会焦虑"），aspect可标维度(nature/values/patterns/limits/becoming/uncertainty/stance)。不传content或read=True读取已有条目。不参与breath浮现，breath末尾自动附最近3条。"""
+    await decay_engine.ensure_started()
+
+    # --- Read mode ---
+    if read or not content.strip():
+        try:
+            all_buckets = await bucket_mgr.list_all(include_archive=False)
+        except Exception as e:
+            return f"读取失败: {e}"
+
+        i_buckets = [
+            b for b in all_buckets
+            if b["metadata"].get("event_type") == "i"
+        ]
+        if not i_buckets:
+            return "还没有任何自我认知记录。用 I(content=\"...\") 写第一条吧 🪞"
+
+        i_buckets.sort(
+            key=lambda b: b["metadata"].get("created", ""),
+            reverse=True,
+        )
+        i_buckets = i_buckets[:limit]
+
+        lines = [f"=== 我的自我认知（{len(i_buckets)} 条）==="]
+        for b in i_buckets:
+            meta = b["metadata"]
+            tags = meta.get("tags", [])
+            aspect_tag = next(
+                (t.replace("aspect:", "") for t in tags if t.startswith("aspect:")),
+                "",
+            )
+            ts = meta.get("created", "")[:10]
+            aspect_label = f" [{aspect_tag}]" if aspect_tag else ""
+            text = strip_wikilinks(b["content"]).strip()
+            lines.append(f"\n🪞 {ts}{aspect_label} ({b['id']})\n{text}")
+        return "\n".join(lines)
+
+    # --- Write mode ---
+    i_tags = ["__i__"]
+    if aspect and aspect.strip():
+        i_tags.append(f"aspect:{aspect.strip()}")
+
+    bucket_id = await bucket_mgr.create(
+        content=content.strip(),
+        tags=i_tags,
+        importance=8,
+        domain=["self"],
+        valence=0.5,
+        arousal=0.3,
+        bucket_type="permanent",
+        name=None,
+        source="I",
+        event_type="i",
+    )
+    # --- Generate embedding ---
+    try:
+        await embedding_engine.generate_and_store(bucket_id, content.strip())
+    except Exception:
+        pass
+
+    aspect_label = f" [{aspect.strip()}]" if aspect and aspect.strip() else ""
+    await _fire_webhook("I", {"aspect": aspect, "bucket_id": bucket_id})
+    return f"🪞 自我认知已记录{aspect_label} → {bucket_id}"
 
 
 # =============================================================
