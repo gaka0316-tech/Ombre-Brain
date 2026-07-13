@@ -1775,6 +1775,8 @@ async function showDetail(id) {
         '<div class="field"><label>钉选</label>' + (meta.pinned ? '✓' : '—') + '</div>' +
         '<div class="field"><label>事件类型</label>' + (meta.event_type || '—') + '</div>' +
         '<div class="field"><label>来源</label>' + (meta.source || '—') + '</div>' +
+        (meta.meaning && meta.meaning.length ? '<div class="field"><label>💭 meaning</label>' + meta.meaning.map(function(m) { return esc(m); }).join('<br>') + '</div>' : '') +
+        (meta.media && meta.media.length ? '<div class="field"><label>🖼 media</label>' + meta.media.length + ' 项关联</div>' : '') +
         '<div class="field"><label>创建</label>' + (meta.created || '—') + '</div>' +
         '<div class="field"><label>最后活跃</label>' + (meta.last_active || '—') + '</div>' +
       '</div>' +
