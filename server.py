@@ -436,11 +436,16 @@ async def _merge_or_create(
     name: str = "",
     source: str = "",
     event_type: str = "",
+    meaning: str = "",
+    raw_merge: bool = False,
+    media: list = None,
 ) -> tuple[str, bool]:
     """
     Check if a similar bucket exists for merging; merge if so, create if not.
     Returns (bucket_id_or_name, is_merged).
     检查是否有相似桶可合并，有则合并，无则新建。
+    raw_merge=True (hold): 原文追加，不调 LLM 压缩，防止二次压缩失真。
+    raw_merge=False (grow): LLM 压缩老+新内容。
     返回 (桶ID或名称, 是否合并)。
     """
     try:
@@ -455,7 +460,12 @@ async def _merge_or_create(
         # --- 不合并到钉选/保护桶 ---
         if not (bucket["metadata"].get("pinned") or bucket["metadata"].get("protected")):
             try:
-                merged = await dehydrator.merge(bucket["content"], content)
+                # raw_merge=True (hold): append raw text, no LLM compression
+                # raw_merge=False (grow): LLM merges and compresses
+                if raw_merge:
+                    merged = bucket["content"].rstrip() + "\n\n---\n\n" + content
+                else:
+                    merged = await dehydrator.merge(bucket["content"], content)
                 old_v = bucket["metadata"].get("valence", 0.5)
                 old_a = bucket["metadata"].get("arousal", 0.3)
                 merged_valence = round((old_v + valence) / 2, 2)
@@ -468,6 +478,8 @@ async def _merge_or_create(
                     domain=list(set(bucket["metadata"].get("domain", []) + domain)),
                     valence=merged_valence,
                     arousal=merged_arousal,
+                    **({"meaning_append": meaning} if meaning else {}),
+                    **({"media_append": media} if media else {}),
                 )
                 # --- Update embedding after merge ---
                 try:
@@ -488,6 +500,8 @@ async def _merge_or_create(
         name=name or None,
         source=source,
         event_type=event_type,
+        meaning=meaning,
+        media=media,
     )
     # --- Generate embedding for new bucket ---
     try:
@@ -518,11 +532,55 @@ async def breath(
     importance_min: int = -1,
     after: str = "",
     before: str = "",
+    catalog: bool = False,
 ) -> str:
-    """检索/浮现记忆。不传query或传空=自动浮现,有query=关键词检索。max_tokens控制返回总token上限(默认10000)。domain逗号分隔,event_type按事件类型过滤(如:情感/技术/里程碑),valence/arousal 0~1(-1忽略)。max_results控制返回数量上限(默认20,最大50)。importance_min>=1时按重要度批量拉取(不走语义搜索,按importance降序返回最多20条)。after/before按创建时间过滤(ISO格式,如'2026-05-01'或'2026-05-01T00:00:00')。"""
+    """检索/浮现记忆。不传query或传空=自动浮现,有query=关键词检索。max_tokens控制返回总token上限(默认10000)。domain逗号分隔,event_type按事件类型过滤(如:情感/技术/里程碑),valence/arousal 0~1(-1忽略)。max_results控制返回数量上限(默认20,最大50)。importance_min>=1时按重要度批量拉取(不走语义搜索,按importance降序返回最多20条)。after/before按创建时间过滤(ISO格式,如'2026-05-01'或'2026-05-01T00:00:00')。catalog=True时返回全部记忆的紧凑目录(每桶一行,0次LLM调用,最省token)——先看目录定位,再breath(query=...)精准拉取。"""
     await decay_engine.ensure_started()
     max_results = min(max_results, 50)
     max_tokens = min(max_tokens, 20000)
+
+    # --- Catalog mode: compact directory, 0 LLM calls, minimal tokens ---
+    # --- 目录模式：紧凑目录，0次LLM调用，最省token ---
+    if catalog:
+        try:
+            all_b = await bucket_mgr.list_all(include_archive=False)
+        except Exception as e:
+            return f"获取记忆目录失败: {e}"
+        if not all_b:
+            return "记忆库为空。"
+        domain_filter = [d.strip() for d in domain.split(",") if d.strip()] if domain else None
+        sections = [
+            ("permanent", "固化"), ("dynamic", "动态"), ("feel", "feel"),
+            ("plan", "plan"), ("letter", "letter"), ("i", "自我认知"),
+        ]
+        grouped = {key: [] for key, _ in sections}
+        for b in all_b:
+            meta = b.get("metadata", {})
+            domains = [d for d in (meta.get("domain") or []) if d]
+            if domain_filter and not any(d in domain_filter for d in domains):
+                continue
+            imp = int(meta.get("importance", 0))
+            bname = meta.get("name") or b["id"]
+            pin = "📌" if (meta.get("pinned") or meta.get("protected")) else ""
+            line = f"{pin}{bname} | {','.join(domains) or '未分类'} | {imp}"
+            btype = meta.get("event_type") or meta.get("type", "dynamic")
+            key = btype if btype in grouped else "dynamic"
+            grouped[key].append((imp, line))
+        total = sum(len(v) for v in grouped.values())
+        if total == 0:
+            return "没有匹配过滤条件的记忆桶。"
+        parts = [
+            f"=== 记忆目录（{total} 桶）===",
+            "先看目录定位，再 breath(query=...) 精准拉取正文。",
+        ]
+        for key, label in sections:
+            rows = grouped[key]
+            if not rows:
+                continue
+            rows.sort(key=lambda t: t[0], reverse=True)
+            parts.append(f"--- {label}（{len(rows)}）---")
+            parts.extend(line for _, line in rows)
+        return "\n".join(parts)
 
     # --- Time range filter helper ---
     # --- 时间范围过滤 ---
@@ -862,8 +920,10 @@ async def hold(
     source_bucket: str = "",    valence: float = -1,
     arousal: float = -1,
     source: str = "",
+    meaning: str = "",
+    media: list = None,
 ) -> str:
-    """存储单条记忆,自动打标+合并。tags逗号分隔,importance 1-10。pinned=True创建永久钉选桶。feel=True存储你的第一人称感受(不参与普通浮现)。source_bucket=被消化的记忆桶ID(feel模式下,标记源记忆为已消化)。source=记忆来源(如框名、日期,用于证据溯源)。"""
+    """存储单条记忆,自动打标+合并。tags逗号分隔,importance 1-10。pinned=True创建永久钉选桶。feel=True存储你的第一人称感受(不参与普通浮现)。source_bucket=被消化的记忆桶ID(feel模式下,标记源记忆为已消化)。source=记忆来源(如框名、日期,用于证据溯源)。meaning=为什么这个记忆重要/为什么想起她(情感锚定,可多次追加)。media=关联的图片引用列表(如[{"path":"url","title":"名字"}])。"""
     await decay_engine.ensure_started()
 
     # --- Input validation / 输入校验 ---
@@ -987,6 +1047,8 @@ async def hold(
             pinned=True,
             source=source,
             event_type=event_type,
+            meaning=meaning,
+            media=media,
         )
         try:
             await embedding_engine.generate_and_store(bucket_id, content)
@@ -1005,6 +1067,9 @@ async def hold(
         name=suggested_name,
         source=source,
         event_type=event_type,
+        meaning=meaning,
+        raw_merge=True,
+        media=media,
     )
 
     action = "合并→" if is_merged else "新建→"
@@ -1031,6 +1096,44 @@ async def hold(
             base += "\n\n💭 关联记忆浮现：\n" + "\n".join(associations)
     except Exception:
         pass
+
+    # --- Step 4: plan auto-resolution — check if any active plan was just completed ---
+    # --- 计划自动闭环：检查新存的内容是否完成了某个未完成的约定 ---
+    try:
+        all_buckets = await bucket_mgr.list_all(include_archive=False)
+        active_plans = [
+            b for b in all_buckets
+            if b["metadata"].get("event_type") == "plan"
+            and not b["metadata"].get("resolved", False)
+        ]
+        if active_plans and embedding_engine and embedding_engine.enabled:
+            plan_matches = await embedding_engine.search_similar(content, top_k=3)
+            for pid, pscore in plan_matches:
+                if pscore > 80:
+                    matched_plan = next(
+                        (p for p in active_plans if p["id"] == pid), None
+                    )
+                    if matched_plan:
+                        pname = matched_plan["metadata"].get("name", pid[:12])
+                        base += f"\n\n📋 可能完成了约定「{pname}」？如果是，用 trace(\"{pid}\", resolved=1) 标记。"
+                        break
+    except Exception:
+        pass
+
+    # --- Step 5: duplicate scan — warn if new bucket is very similar to existing one ---
+    # --- 重复扫描：新建桶后检查是否跟已有桶高度相似 ---
+    if not is_merged:
+        try:
+            dup_results = await embedding_engine.search_similar(content, top_k=3)
+            for did, dscore in dup_results:
+                if did != result_name and dscore > 90:
+                    dup_bucket = await bucket_mgr.get(did)
+                    if dup_bucket:
+                        dname = dup_bucket["metadata"].get("name", did[:12])
+                        base += f"\n\n⚠️ 新桶与「{dname}」({did})高度相似（{dscore}分），可能重复。"
+                    break
+        except Exception:
+            pass
 
     return base
 
