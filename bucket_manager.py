@@ -112,6 +112,8 @@ class BucketManager:
         protected: bool = False,
         source: str = "",
         event_type: str = "",
+        meaning: str = "",
+        media: list = None,
     ) -> str:
         """
         Create a new memory bucket, return bucket ID.
@@ -158,6 +160,10 @@ class BucketManager:
             metadata["pinned"] = True
         if protected:
             metadata["protected"] = True
+        if meaning and meaning.strip():
+            metadata["meaning"] = [meaning.strip()]
+        if media:
+            metadata["media"] = media[:20]  # max 20 media references per bucket
 
         # --- Assemble Markdown file (frontmatter + body) ---
         # --- 组装 Markdown 文件 ---
@@ -288,6 +294,23 @@ class BucketManager:
             post["digested"] = bool(kwargs["digested"])
         if "model_valence" in kwargs:
             post["model_valence"] = max(0.0, min(1.0, float(kwargs["model_valence"])))
+        # --- Miss: meaning append (hold's emotional anchor) ---
+        if "meaning" in kwargs:
+            post["meaning"] = kwargs["meaning"]
+        if "meaning_append" in kwargs:
+            existing = post.get("meaning", [])
+            if not isinstance(existing, list):
+                existing = [existing] if existing else []
+            existing.append(str(kwargs["meaning_append"]).strip())
+            post["meaning"] = existing
+        if "media" in kwargs:
+            post["media"] = kwargs["media"]
+        if "media_append" in kwargs:
+            existing_media = post.get("media", [])
+            if not isinstance(existing_media, list):
+                existing_media = []
+            existing_media.extend(kwargs["media_append"])
+            post["media"] = existing_media[:20]  # cap at 20
 
         # --- Auto-refresh activation time / 自动刷新激活时间 ---
         post["last_active"] = now_iso()
