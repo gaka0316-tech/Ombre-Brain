@@ -1671,7 +1671,7 @@ function renderTimelinePage(el, totalCount) {
         '<div class="timeline-date">' + day + '</div>' +
         '<div class="timeline-icon">' + icon + '</div>' +
         '<div class="timeline-body">' +
-          '<div class="timeline-name">' + esc(b.name) + '</div>' +
+          '<div class="timeline-name">' + esc(b.name) + (b.media && b.media.length ? ' 📷' : '') + '</div>' +
           '<div class="timeline-preview">' + esc(b.content_preview) + '</div>' +
         '</div>' +
       '</div>';
@@ -1891,6 +1891,31 @@ function renderGallery() {
   el.innerHTML = html;
 }
 
+async function deleteMedia(bucketId, mediaIndex) {
+  if (!confirm('确定删除这张图片？')) return;
+  try {
+    var res = await authFetch(BASE + '/api/bucket/' + bucketId);
+    if (!res.ok) { alert('获取记忆失败'); return; }
+    var b = await res.json();
+    var media = (b.metadata || {}).media || [];
+    if (mediaIndex >= media.length) { alert('图片索引无效'); return; }
+    media.splice(mediaIndex, 1);
+    var updateRes = await authFetch(BASE + '/api/bucket/' + bucketId, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ media: media })
+    });
+    if (updateRes.ok) {
+      alert('已删除');
+      showDetail(bucketId);
+    } else {
+      alert('删除失败');
+    }
+  } catch(e) {
+    alert('删除出错: ' + e.message);
+  }
+}
+
 async function editMediaDesc(bucketId, mediaIndex, currentDesc) {
   var newDesc = prompt('编辑图片描述：', currentDesc);
   if (newDesc === null) return;
@@ -1975,8 +2000,8 @@ async function showDetail(id) {
           var isUrl = typeof path === 'string' && (path.startsWith('http') || path.startsWith('data:'));
           var imgUrl = isUrl ? path : (isStored ? (BASE + '/api/media/' + path) : path);
           var descHtml = desc
-            ? '<div style="font-size:12px;color:var(--text);margin-top:4px;line-height:1.5;background:var(--bg);padding:6px 8px;border-radius:6px;">📝 ' + esc(desc) + ' <span style="cursor:pointer;color:var(--accent);font-size:11px;" onclick="event.stopPropagation();editMediaDesc(\'' + id + '\',' + i + ',\'' + esc(desc).replace(/'/g, "\\'") + '\')">✏️编辑</span></div>'
-            : '<div style="margin-top:4px;"><span style="cursor:pointer;color:var(--accent);font-size:12px;" onclick="event.stopPropagation();editMediaDesc(\'' + id + '\',' + i + ',\'\')">➕ 添加描述</span></div>';
+            ? '<div style="font-size:12px;color:var(--text);margin-top:4px;line-height:1.5;background:var(--bg);padding:6px 8px;border-radius:6px;">📝 ' + esc(desc) + ' <span style="cursor:pointer;color:var(--accent);font-size:11px;" onclick="event.stopPropagation();editMediaDesc(\'' + id + '\',' + i + ',\'' + esc(desc).replace(/'/g, "\\'") + '\')">✏️编辑</span> <span style="cursor:pointer;color:var(--negative);font-size:11px;" onclick="event.stopPropagation();deleteMedia(\'' + id + '\',' + i + ')">🗑删除</span></div>'
+            : '<div style="margin-top:4px;"><span style="cursor:pointer;color:var(--accent);font-size:12px;" onclick="event.stopPropagation();editMediaDesc(\'' + id + '\',' + i + ',\'\')">➕ 添加描述</span> <span style="cursor:pointer;color:var(--negative);font-size:12px;" onclick="event.stopPropagation();deleteMedia(\'' + id + '\',' + i + ')">🗑删除</span></div>';
           if (isUrl || isStored) {
             return '<div style="margin:6px 0;"><img src="' + esc(imgUrl) + '" alt="' + esc(title) + '" style="max-width:200px;max-height:150px;border-radius:6px;border:1px solid var(--border);cursor:pointer;" onclick="openLightbox(\'' + esc(imgUrl) + '\')"><div style="font-size:11px;color:var(--text-dim);">' + esc(title) + (isStored ? ' ✅存储' : '') + '</div>' + descHtml + '</div>';
           }
