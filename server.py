@@ -1949,6 +1949,7 @@ async def api_buckets(request):
                 "activation_count": meta.get("activation_count", 1),
                 "score": decay_engine.calculate_score(meta),
                 "content_preview": strip_wikilinks(b.get("content", ""))[:200],
+                "media": meta.get("media", []),
             })
         result.sort(key=lambda x: x["score"], reverse=True)
         return JSONResponse(result)
