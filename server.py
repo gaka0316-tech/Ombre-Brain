@@ -2273,13 +2273,13 @@ async def api_media_serve(request):
     # Security: prevent path traversal
     if ".." in filepath or filepath.startswith("/"):
         return JSONResponse({"error": "invalid path"}, status_code=400)
-    full_path = os.path.join(bucket_mgr.media_dir, filepath)
+    full_path = os.path.join(bucket_mgr.base_dir, filepath)
     if not os.path.isfile(full_path):
         return JSONResponse({"error": "file not found"}, status_code=404)
-    # Verify path is within media_dir
+    # Verify path is within base_dir
     real_path = os.path.realpath(full_path)
-    real_media = os.path.realpath(bucket_mgr.media_dir)
-    if not real_path.startswith(real_media):
+    real_base = os.path.realpath(bucket_mgr.base_dir)
+    if not real_path.startswith(real_base):
         return JSONResponse({"error": "access denied"}, status_code=403)
     content_type = mt.guess_type(full_path)[0] or "application/octet-stream"
     return FileResponse(full_path, media_type=content_type)
