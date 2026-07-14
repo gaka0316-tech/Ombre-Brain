@@ -328,14 +328,8 @@ class BucketManager:
             existing.append(str(kwargs["meaning_append"]).strip())
             post["meaning"] = existing
         if "media" in kwargs:
-            if self.media_store:
-                try:
-                    persisted = [self.media_store._persist_one(bucket_id, item) for item in (kwargs["media"] if isinstance(kwargs["media"], list) else [kwargs["media"]])]
-                    post["media"] = persisted
-                except Exception:
-                    post["media"] = kwargs["media"]
-            else:
-                post["media"] = kwargs["media"]
+            # Direct replacement (from dashboard edit/delete) — already persisted, skip media_store
+            post["media"] = kwargs["media"]
         if "media_append" in kwargs:
             existing_media = post.get("media", [])
             if not isinstance(existing_media, list):
