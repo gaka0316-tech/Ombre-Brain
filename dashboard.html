@@ -674,6 +674,7 @@
   <div class="tab" data-tab="letters">✉️ 信箱</div>
   <div class="tab" data-tab="plans">📋 计划</div>
   <div class="tab" data-tab="selfknow">🪞 自我认知</div>
+  <div class="tab" data-tab="anchors">⚓ 坐标系</div>
   <div class="tab" data-tab="config">配置</div>
   <div class="tab" data-tab="import">导入</div>
   <div class="tab" data-tab="settings">设置</div>
@@ -736,6 +737,13 @@
 <div class="content" id="selfknow-view" style="display:none">
   <div style="margin-bottom:16px;color:var(--text-dim);font-size:13px;">自我认知日志。通过 <code>I(content="...", aspect="...")</code> 写入，<code>I(read=True)</code> 读取。breath 时自动附最近 3 条。</div>
   <div id="selfknow-list">
+    <div class="loading">加载中…</div>
+  </div>
+</div>
+
+<div class="content" id="anchors-view" style="display:none">
+  <div style="margin-bottom:16px;color:var(--text-dim);font-size:13px;">坐标系桶（anchor）。重要但刻意不在默认 breath 浮现，搜索时仍能找到。与 pinned 互斥。上限 24 个。通过 <code>anchor(bucket_id)</code> 设置，<code>release(bucket_id)</code> 释放。</div>
+  <div id="anchors-list">
     <div class="loading">加载中…</div>
   </div>
 </div>
@@ -1364,6 +1372,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.getElementById('letters-view').style.display = target === 'letters' ? '' : 'none';
     document.getElementById('plans-view').style.display = target === 'plans' ? '' : 'none';
     document.getElementById('selfknow-view').style.display = target === 'selfknow' ? '' : 'none';
+    document.getElementById('anchors-view').style.display = target === 'anchors' ? '' : 'none';
     document.getElementById('breath-view').style.display = target === 'breath' ? '' : 'none';
     document.getElementById('network-view').style.display = target === 'network' ? '' : 'none';
     document.getElementById('config-view').style.display = target === 'config' ? '' : 'none';
@@ -1374,6 +1383,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     if (target === 'letters') renderLetters();
     if (target === 'plans') renderPlans();
     if (target === 'selfknow') renderSelfknow();
+    if (target === 'anchors') renderAnchors();
     if (target === 'network' && !networkLoaded) loadNetwork();
     if (target === 'config') loadConfig();
     if (target === 'import') { pollImportStatus(); loadImportResults(); }
@@ -1446,7 +1456,7 @@ function buildFilters() {
 }
 
 function filterBuckets(buckets) {
-  if (currentFilter === 'all') return buckets.filter(function(b) { return b.event_type !== 'i' && b.event_type !== 'letter' && b.event_type !== 'plan'; });
+  if (currentFilter === 'all') return buckets.filter(function(b) { return b.event_type !== 'i' && b.event_type !== 'letter' && b.event_type !== 'plan' && !b.anchor; });
   if (currentFilter === 'pinned') return buckets.filter(function(b) { return b.pinned; });
   if (currentFilter === 'feel') return buckets.filter(function(b) { return b.type === 'feel'; });
   if (currentFilter === 'unresolved') return buckets.filter(function(b) { return !b.resolved && b.type !== 'permanent' && !b.pinned; });
@@ -1809,6 +1819,30 @@ function renderSelfknow() {
   el.innerHTML = html;
 }
 
+function renderAnchors() {
+  var el = document.getElementById('anchors-list');
+  var items = allBuckets.filter(function(b) { return b.anchor; });
+  if (!items.length) {
+    el.innerHTML = '<div class="loading" style="color:var(--text-dim);">还没有坐标系桶。用 <code>anchor(bucket_id)</code> 把重要但不需要每次浮现的桶放进坐标系 ⚓</div>';
+    return;
+  }
+  items.sort(function(a, b) { return (b.importance || 5) - (a.importance || 5); });
+  var html = '<div style="margin-bottom:12px;color:var(--text-dim);font-size:13px;">共 ' + items.length + '/24 个坐标系桶</div>';
+  items.forEach(function(b) {
+    var date = b.created ? b.created.substring(0, 10) : '';
+    var domains = (b.domain || []).join(', ') || '未分类';
+    html += '<div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:10px;padding:16px;margin-bottom:10px;cursor:pointer;" onclick="showDetail(\'' + b.id + '\')">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
+        '<div style="font-weight:600;color:var(--text);">⚓ ' + esc(b.name || b.id.substring(0,12)) + '</div>' +
+        '<div style="font-size:12px;color:var(--text-dim);">重要度 ' + (b.importance || 5) + '/10</div>' +
+      '</div>' +
+      '<div style="font-size:13px;color:var(--text-dim);margin-bottom:6px;">' + esc(domains) + ' · ' + date + '</div>' +
+      '<div style="font-size:14px;color:var(--text);line-height:1.7;">' + esc(b.content_preview || '') + '</div>' +
+    '</div>';
+  });
+  el.innerHTML = html;
+}
+
 async function searchBuckets(query) {
   try {
     var res = await fetch(BASE + '/api/search?q=' + encodeURIComponent(query));
@@ -1845,6 +1879,7 @@ async function showDetail(id) {
         '<div class="field"><label>已解决</label>' + (meta.resolved ? '✓' : '—') + '</div>' +
         '<div class="field"><label>已消化</label>' + (meta.digested ? '✓' : '—') + '</div>' +
         '<div class="field"><label>钉选</label>' + (meta.pinned ? '✓' : '—') + '</div>' +
+        '<div class="field"><label>⚓ 坐标系</label>' + (meta.anchor ? '✓' : '—') + '</div>' +
         '<div class="field"><label>事件类型</label>' + (meta.event_type || '—') + '</div>' +
         '<div class="field"><label>来源</label>' + (meta.source || '—') + '</div>' +
         (meta.meaning && meta.meaning.length ? '<div class="field"><label>💭 meaning</label>' + meta.meaning.map(function(m) { return esc(m); }).join('<br>') + '</div>' : '') +
