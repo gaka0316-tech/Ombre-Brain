@@ -2123,6 +2123,8 @@ async def api_bucket_update(request):
             updates["importance"] = 10
     if "digested" in body:
         updates["digested"] = bool(body["digested"])
+    if "media" in body:
+        updates["media"] = body["media"] if isinstance(body["media"], list) else []
 
     if not updates:
         return JSONResponse({"error": "no fields to update"}, status_code=400)
@@ -3095,8 +3097,13 @@ async def api_system_status(request):
                 "archive": stats.get("archive_count", 0),
                 "total": stats.get("permanent_count", 0) + stats.get("dynamic_count", 0),
             },
+            "vision": {
+                "enabled": bool(_VISION_API_KEY),
+                "model": _VISION_MODEL or ("qwen/qwen3.5-flash" if _VISION_BASE_URL else "claude-haiku-4-5-20251001") if _VISION_API_KEY else "",
+                "mode": "OpenAI-compatible" if _VISION_BASE_URL else "Anthropic" if _VISION_API_KEY else "disabled",
+            },
             "using_env_password": bool(os.environ.get("OMBRE_DASHBOARD_PASSWORD", "")),
-            "version": "1.3.0",
+            "version": "1.4.0",
         })
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
