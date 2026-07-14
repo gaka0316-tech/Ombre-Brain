@@ -114,10 +114,17 @@ import_engine = ImportEngine(config, bucket_mgr, dehydrator, embedding_engine)  
 # --- Create MCP server instance / 创建 MCP 服务器实例 ---
 # host="0.0.0.0" so Docker container's SSE is externally reachable
 # stdio mode ignores host (no network)
+# --- MCP path secret: set OMBRE_MCP_SECRET env var to lock /mcp endpoint ---
+# --- MCP 路径密钥：设置 OMBRE_MCP_SECRET 环境变量给 /mcp 端点加锁 ---
+_mcp_secret = os.environ.get("OMBRE_MCP_SECRET", "").strip()
+_mcp_path = f"/mcp-{_mcp_secret}" if _mcp_secret else "/mcp"
+if _mcp_secret:
+    logger.info(f"MCP path secret enabled → {_mcp_path}")
 mcp = FastMCP(
     "Ombre Brain",
     host="0.0.0.0",
     port=OMBRE_PORT,
+    streamable_http_path=_mcp_path,
 )
 
 
@@ -521,7 +528,23 @@ async def _merge_or_create(
 # 有参数：按关键词+情感坐标检索记忆
 # =============================================================
 @mcp.tool()
-async def breath(
+async def breath() -> str:
+    """无参数,睁眼看看自己记得什么:返回权重最高的未解决记忆+置顶核心准则。0参数是刻意设计——claude.ai按需加载工具时会跳过参数复杂的工具,拆成0参数才能保证每次对话自动浮现,不用手动触发。要按关键词找记忆用breath_search(query=...);要用catalog/tags/importance_min/valence/arousal/max_tokens等高级模式用breath_advanced(...)。"""
+    return await _breath_dispatch()
+
+
+@mcp.tool()
+async def breath_search(
+    query: str,
+    domain: str = "",
+    max_results: int = 20,
+) -> str:
+    """按关键词/语义检索记忆桶,融合关键词+语义检索。domain逗号分隔,按主题域预筛。max_results=返回条数上限(默认20,最大50)。需要tags/importance_min/valence/arousal/max_tokens/catalog等更多过滤维度用breath_advanced(...)。"""
+    return await _breath_dispatch(query=query, domain=domain, max_results=max_results)
+
+
+@mcp.tool()
+async def breath_advanced(
     query: str = "",
     max_tokens: int = 10000,
     domain: str = "",
@@ -534,7 +557,31 @@ async def breath(
     before: str = "",
     catalog: bool = False,
 ) -> str:
-    """检索/浮现记忆。不传query或传空=自动浮现,有query=关键词检索。max_tokens控制返回总token上限(默认10000)。domain逗号分隔,event_type按事件类型过滤(如:情感/技术/里程碑),valence/arousal 0~1(-1忽略)。max_results控制返回数量上限(默认20,最大50)。importance_min>=1时按重要度批量拉取(不走语义搜索,按importance降序返回最多20条)。after/before按创建时间过滤(ISO格式,如'2026-05-01'或'2026-05-01T00:00:00')。catalog=True时返回全部记忆的紧凑目录(每桶一行,0次LLM调用,最省token)——先看目录定位,再breath(query=...)精准拉取。"""
+    """breath的完整参数版,给需要精细控制的场景用(日常用breath()/breath_search()就够了)。不传query=返回权重最高的未解决记忆;传query=融合关键词+语义检索。catalog=True=目录模式:只返回每桶一行元数据(0次LLM调用,最省token),适合开新对话先看目录再breath_search(query=...)精准拉取。max_tokens=单次返回总token上限(默认10000)。domain逗号分隔,event_type按事件类型过滤(如:情感/技术/里程碑),valence/arousal 0~1(-1忽略)。max_results=返回条数上限(默认20,最大50)。importance_min>=1=按重要度降序返回最多20条。after/before按创建时间过滤(ISO格式)。"""
+    return await _breath_dispatch(
+        query=query, max_tokens=max_tokens, domain=domain,
+        event_type=event_type, valence=valence, arousal=arousal,
+        max_results=max_results, importance_min=importance_min,
+        after=after, before=before, catalog=catalog,
+    )
+
+
+# --- Internal breath dispatcher (shared logic for all 3 breath tools) ---
+# --- 内部breath调度器（三个breath工具的共享逻辑）---
+async def _breath_dispatch(
+    query: str = "",
+    max_tokens: int = 10000,
+    domain: str = "",
+    event_type: str = "",
+    valence: float = -1,
+    arousal: float = -1,
+    max_results: int = 20,
+    importance_min: int = -1,
+    after: str = "",
+    before: str = "",
+    catalog: bool = False,
+) -> str:
+    """Internal dispatcher — NOT an MCP tool."""
     await decay_engine.ensure_started()
     max_results = min(max_results, 50)
     max_tokens = min(max_tokens, 20000)
@@ -669,6 +716,7 @@ async def breath(
             and b["metadata"].get("type") not in ("permanent", "feel")
             and not b["metadata"].get("pinned", False)
             and not b["metadata"].get("protected", False)
+            and not b["metadata"].get("anchor", False)
         ]
         unresolved = [b for b in unresolved if _in_time_range(b)]
 
@@ -1243,7 +1291,7 @@ async def trace(
     delete: bool = False,
     meaning: str = "",
 ) -> str:
-    """修改记忆元数据或内容。resolved=1沉底/0激活,pinned=1钉选/0取消,digested=1隐藏(保留但不浮现)/0取消隐藏,content=替换桶正文,delete=True删除。meaning=追加一条情感锚定(不覆盖已有的)。只传需改的,-1或空=不改。"""
+    """修改记忆元数据或内容。resolved=1沉底/0激活,pinned=1钉选/0取消,digested=1隐藏(保留但不浮现)/0取消隐藏,content=替换桶正文,delete=True删除。meaning=追加一条情感锚定(不覆盖已有的)。anchor的设置请用anchor()/release()工具。只传需改的,-1或空=不改。"""
 
     if not bucket_id or not bucket_id.strip():
         return "请提供有效的 bucket_id。"
@@ -1279,6 +1327,7 @@ async def trace(
         updates["pinned"] = bool(pinned)
         if pinned == 1:
             updates["importance"] = 10  # pinned → lock importance
+            updates["anchor"] = False   # pinned 与 anchor 互斥
     if digested in (0, 1):
         updates["digested"] = bool(digested)
     if content:
@@ -1803,6 +1852,46 @@ async def I(
 
 
 # =============================================================
+# Tool 12: anchor — Mark as coordinate-system bucket
+# 工具 12：anchor — 标记为坐标系桶（重要但不主动浮现）
+# =============================================================
+@mcp.tool()
+async def anchor(bucket_id: str) -> str:
+    """把指定桶标记为anchor(坐标系)。anchor不主动出现在默认breath，但query/domain/emotion命中时仍返回。与pinned互斥——pinned=永远浮现(核心准则)，anchor=刻意不浮现(坐标系)。硬上限24，已满时拒绝并提示先release。"""
+    await decay_engine.ensure_started()
+    bucket_id = str(bucket_id or "").strip()
+    if not bucket_id:
+        return "请提供 bucket_id。"
+    result = await bucket_mgr.set_anchor(bucket_id, True)
+    if not result["ok"]:
+        return f"锚定失败。{result.get('error', '未知错误')} 当前 anchor: {result.get('count', '?')}/{result.get('limit', 24)}。"
+    if result.get("noop"):
+        return f"它已经是 anchor 了。当前 {result['count']}/{result['limit']}。"
+    await _fire_webhook("anchor", {"bucket_id": bucket_id})
+    return f"已放进 anchor 坐标系。不会被默认浮现挤进上下文，但搜索时仍能找到。当前 {result['count']}/{result['limit']}。"
+
+
+# =============================================================
+# Tool 13: release — Remove anchor mark
+# 工具 13：release — 解除坐标系标记
+# =============================================================
+@mcp.tool()
+async def release(bucket_id: str) -> str:
+    """解除指定桶的anchor标记。桶恢复为普通状态，重新参与默认breath浮现。"""
+    await decay_engine.ensure_started()
+    bucket_id = str(bucket_id or "").strip()
+    if not bucket_id:
+        return "请提供 bucket_id。"
+    result = await bucket_mgr.set_anchor(bucket_id, False)
+    if not result["ok"]:
+        return f"释放失败。{result.get('error', '未知错误')}"
+    if result.get("noop"):
+        return f"它本来就不是 anchor。"
+    await _fire_webhook("release", {"bucket_id": bucket_id})
+    return f"已从 anchor 坐标系释放。桶恢复普通状态，重新参与 breath 浮现。当前 {result['count']}/{result['limit']}。"
+
+
+# =============================================================
 # Dashboard API endpoints (for lightweight Web UI)
 # 仪表板 API（轻量 Web UI 用）
 # =============================================================
@@ -1830,6 +1919,7 @@ async def api_buckets(request):
                 "importance": meta.get("importance", 5),
                 "resolved": meta.get("resolved", False),
                 "pinned": meta.get("pinned", False),
+                "anchor": meta.get("anchor", False),
                 "digested": meta.get("digested", False),
                 "created": meta.get("created", ""),
                 "last_active": meta.get("last_active", ""),
