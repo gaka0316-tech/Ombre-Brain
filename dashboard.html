@@ -1883,18 +1883,67 @@ async function showDetail(id) {
         '<div class="field"><label>事件类型</label>' + (meta.event_type || '—') + '</div>' +
         '<div class="field"><label>来源</label>' + (meta.source || '—') + '</div>' +
         (meta.meaning && meta.meaning.length ? '<div class="field"><label>💭 meaning</label>' + meta.meaning.map(function(m) { return esc(m); }).join('<br>') + '</div>' : '') +
-        (meta.media && meta.media.length ? '<div class="field"><label>🖼 media</label>' + meta.media.length + ' 项关联</div>' : '') +
+        (meta.media && meta.media.length ? '<div class="field"><label>🖼 media</label>' + meta.media.map(function(m, i) {
+          var path = m.path || m;
+          var title = m.title || ('图片 ' + (i+1));
+          var isStored = m.stored;
+          var isUrl = typeof path === 'string' && (path.startsWith('http') || path.startsWith('data:'));
+          if (isUrl || isStored) {
+            return '<div style="margin:4px 0;"><img src="' + esc(path) + '" alt="' + esc(title) + '" style="max-width:200px;max-height:150px;border-radius:6px;border:1px solid var(--border);cursor:pointer;" onclick="window.open(\'' + esc(path) + '\',\'_blank\')"><div style="font-size:11px;color:var(--text-dim);">' + esc(title) + (isStored ? ' ✅存储' : '') + '</div></div>';
+          }
+          return '<div style="margin:2px 0;font-size:13px;">' + esc(title) + ': ' + esc(path) + '</div>';
+        }).join('') + '</div>' : '') +
         '<div class="field"><label>创建</label>' + (meta.created || '—') + '</div>' +
         '<div class="field"><label>最后活跃</label>' + (meta.last_active || '—') + '</div>' +
       '</div>' +
       '<div class="detail-content">' + esc(b.content) + '</div>' +
       '<div class="detail-actions">' +
         '<button onclick="openEdit(\'' + id + '\')">✏️ 编辑</button>' +
+        '<button onclick="uploadMedia(\'' + id + '\')">🖼 上传图片</button>' +
         '<button class="btn-delete" onclick="deleteBucket(\'' + id + '\')">🗑 删除</button>' +
       '</div>';
   } catch (e) {
     content.innerHTML = '<div class="loading">加载失败: ' + e.message + '</div>';
   }
+}
+
+async function uploadMedia(bucketId) {
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.multiple = true;
+  input.onchange = async function() {
+    var files = Array.from(input.files);
+    if (!files.length) return;
+    if (files.length > 5) { alert('一次最多上传5张'); return; }
+    var mediaItems = [];
+    for (var f of files) {
+      if (f.size > 25 * 1024 * 1024) { alert(f.name + ' 超过25MB限制'); return; }
+      var base64 = await new Promise(function(resolve) {
+        var reader = new FileReader();
+        reader.onload = function() { resolve(reader.result.split(',')[1]); };
+        reader.readAsDataURL(f);
+      });
+      mediaItems.push({ data_base64: base64, title: f.name, type: f.type });
+    }
+    try {
+      var res = await authFetch(BASE + '/api/bucket/' + bucketId + '/media', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ media: mediaItems })
+      });
+      var data = await res.json();
+      if (res.ok) {
+        alert('上传成功！' + mediaItems.length + ' 张图片已存储');
+        showDetail(bucketId);
+      } else {
+        alert('上传失败: ' + (data.error || '未知错误'));
+      }
+    } catch (e) {
+      alert('上传出错: ' + e.message);
+    }
+  };
+  input.click();
 }
 
 async function openEdit(id) {
