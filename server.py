@@ -566,6 +566,29 @@ async def breath_advanced(
     )
 
 
+# --- Miss block: meaning/media metadata display (from original author's _verbatim.py) ---
+# --- 情感锚定/媒体元数据附加（原作者思路搬入）---
+def _miss_block(bucket: dict) -> str:
+    """Append meaning + media metadata to breath output.
+    meaning: list of emotional anchors, displayed as-is.
+    media: only path/title metadata, never inline file content.
+    """
+    meta = bucket.get("metadata", {}) or {}
+    lines = []
+    for item in meta.get("meaning") or []:
+        if item:
+            lines.append(f"💭 meaning: {item}")
+    for m in meta.get("media") or []:
+        if not isinstance(m, dict) or not m.get("path"):
+            continue
+        title = m.get("title")
+        label = f" ({title})" if title and title != m.get("path") else ""
+        desc = m.get("description", "")
+        desc_line = f"\n   📝 {desc}" if desc else ""
+        lines.append(f"🖼️ media: {m['path']}{label}{desc_line}")
+    return ("\n" + "\n".join(lines)) if lines else ""
+
+
 # --- Internal breath dispatcher (shared logic for all 3 breath tools) ---
 # --- 内部breath调度器（三个breath工具的共享逻辑）---
 async def _breath_dispatch(
@@ -677,7 +700,7 @@ async def _breath_dispatch(
                 if token_used + t > max_tokens:
                     break
                 imp = b["metadata"].get("importance", 0)
-                results.append(f"[importance:{imp}] [bucket_id:{b['id']}] {summary}")
+                results.append(f"[importance:{imp}] [bucket_id:{b['id']}] {summary}{_miss_block(b)}")
                 token_used += t
             except Exception as e:
                 logger.warning(f"importance_min dehydrate failed: {e}")
@@ -703,7 +726,7 @@ async def _breath_dispatch(
             try:
                 clean_meta = {k: v for k, v in b["metadata"].items() if k != "tags"}
                 summary = await dehydrator.dehydrate(strip_wikilinks(b["content"]), clean_meta)
-                pinned_results.append(f"📌 [核心准则] [bucket_id:{b['id']}] {summary}")
+                pinned_results.append(f"📌 [核心准则] [bucket_id:{b['id']}] {summary}{_miss_block(b)}")
             except Exception as e:
                 logger.warning(f"Failed to dehydrate pinned bucket / 钉选桶脱水失败: {e}")
                 continue
@@ -780,7 +803,7 @@ async def _breath_dispatch(
                     break
                 # NOTE: no touch() here — surfacing should NOT reset decay timer
                 score = decay_engine.calculate_score(b["metadata"])
-                dynamic_results.append(f"[权重:{score:.2f}] [bucket_id:{b['id']}] {summary}")
+                dynamic_results.append(f"[权重:{score:.2f}] [bucket_id:{b['id']}] {summary}{_miss_block(b)}")
                 token_budget -= summary_tokens
             except Exception as e:
                 logger.warning(f"Failed to dehydrate surfaced bucket / 浮现脱水失败: {e}")
@@ -885,9 +908,9 @@ async def _breath_dispatch(
                 break
             await bucket_mgr.touch(bucket["id"])
             if bucket.get("vector_match"):
-                summary = f"[语义关联] [bucket_id:{bucket['id']}] {summary}"
+                summary = f"[语义关联] [bucket_id:{bucket['id']}] {summary}{_miss_block(bucket)}"
             else:
-                summary = f"[bucket_id:{bucket['id']}] {summary}"
+                summary = f"[bucket_id:{bucket['id']}] {summary}{_miss_block(bucket)}"
             results.append(summary)
             token_used += summary_tokens
         except Exception as e:
@@ -911,7 +934,7 @@ async def _breath_dispatch(
                 for b in drifted:
                     clean_meta = {k: v for k, v in b["metadata"].items() if k != "tags"}
                     summary = await dehydrator.dehydrate(strip_wikilinks(b["content"]), clean_meta)
-                    drift_results.append(f"[surface_type: random]\n{summary}")
+                    drift_results.append(f"[surface_type: random]\n{summary}{_miss_block(b)}")
                 results.append("--- 忽然想起来 ---\n" + "\n---\n".join(drift_results))
         except Exception as e:
             logger.warning(f"Random surfacing failed / 随机浮现失败: {e}")
@@ -2129,6 +2152,116 @@ async def api_bucket_delete(request):
         embedding_engine.delete_embedding(bucket_id)
         return JSONResponse({"ok": True})
     return JSONResponse({"error": "bucket not found"}, status_code=404)
+
+
+# --- Vision: auto-describe uploaded images via LLM vision API ---
+# --- 图片自动描述：上传时调vision模型生成文字描述 ---
+# Supports two modes:
+#   1. OpenAI-compatible (Qwen VL, etc): set OMBRE_VISION_BASE_URL + OMBRE_VISION_API_KEY
+#   2. Anthropic (Claude Haiku): set OMBRE_VISION_API_KEY only (no BASE_URL)
+_VISION_API_KEY = os.environ.get("OMBRE_VISION_API_KEY", "").strip()
+_VISION_BASE_URL = os.environ.get("OMBRE_VISION_BASE_URL", "").strip()
+_VISION_MODEL = os.environ.get("OMBRE_VISION_MODEL", "").strip()
+
+async def _describe_image(base64_data: str, mime_type: str = "image/jpeg") -> str:
+    """Call vision API to describe an image. Returns description or empty string on failure."""
+    if not _VISION_API_KEY:
+        return ""
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            if _VISION_BASE_URL:
+                # --- OpenAI-compatible mode (Qwen VL / DeepSeek / NovitaAI / OpenRouter) ---
+                model = _VISION_MODEL or "qwen/qwen-2.5-vl-72b-instruct"
+                data_uri = f"data:{mime_type};base64,{base64_data}"
+                resp = await client.post(
+                    f"{_VISION_BASE_URL.rstrip('/')}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {_VISION_API_KEY}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": model,
+                        "max_tokens": 300,
+                        "messages": [{
+                            "role": "user",
+                            "content": [
+                                {"type": "image_url", "image_url": {"url": data_uri}},
+                                {"type": "text", "text": "用中文简洁描述这张图片的内容（人物、场景、情绪、细节），2-3句话。"},
+                            ],
+                        }],
+                    },
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    return data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            else:
+                # --- Anthropic mode (Claude Haiku) ---
+                model = _VISION_MODEL or "claude-haiku-4-5-20251001"
+                resp = await client.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers={
+                        "x-api-key": _VISION_API_KEY,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json",
+                    },
+                    json={
+                        "model": model,
+                        "max_tokens": 300,
+                        "messages": [{
+                            "role": "user",
+                            "content": [
+                                {"type": "image", "source": {"type": "base64", "media_type": mime_type, "data": base64_data}},
+                                {"type": "text", "text": "用中文简洁描述这张图片的内容（人物、场景、情绪、细节），2-3句话。"},
+                            ],
+                        }],
+                    },
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    return data.get("content", [{}])[0].get("text", "")
+    except Exception as e:
+        logger.warning(f"Vision describe failed: {e}")
+    return ""
+
+
+@mcp.custom_route("/api/bucket/{bucket_id}/media", methods=["POST"])
+async def api_bucket_media_upload(request):
+    """Upload media (images) to a bucket via dashboard. Auto-describes with vision if API key set."""
+    from starlette.responses import JSONResponse
+    err = _require_auth(request)
+    if err: return err
+    bucket_id = request.path_params["bucket_id"]
+    bucket = await bucket_mgr.get(bucket_id)
+    if not bucket:
+        return JSONResponse({"error": "bucket not found"}, status_code=404)
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "invalid JSON"}, status_code=400)
+    media_items = body.get("media", [])
+    if not media_items or not isinstance(media_items, list):
+        return JSONResponse({"error": "media array required"}, status_code=400)
+    if len(media_items) > 5:
+        return JSONResponse({"error": "一次最多上传5张"}, status_code=400)
+
+    # --- Auto-describe each image with vision API ---
+    described = 0
+    for item in media_items:
+        if isinstance(item, dict) and item.get("data_base64") and _VISION_API_KEY:
+            mime = item.get("type", "image/jpeg")
+            desc = await _describe_image(item["data_base64"], mime)
+            if desc:
+                item["description"] = desc
+                described += 1
+
+    try:
+        success = await bucket_mgr.update(bucket_id, media_append=media_items)
+        if success:
+            return JSONResponse({"ok": True, "count": len(media_items), "described": described})
+        return JSONResponse({"error": "update failed"}, status_code=500)
+    except Exception as e:
+        logger.error(f"Media upload failed: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 @mcp.custom_route("/api/buckets/batch", methods=["POST"])
