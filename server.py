@@ -2264,6 +2264,27 @@ async def api_bucket_media_upload(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@mcp.custom_route("/api/media/{filepath:path}", methods=["GET"])
+async def api_media_serve(request):
+    """Serve stored media files from _media directory."""
+    from starlette.responses import FileResponse, JSONResponse
+    import mimetypes as mt
+    filepath = request.path_params["filepath"]
+    # Security: prevent path traversal
+    if ".." in filepath or filepath.startswith("/"):
+        return JSONResponse({"error": "invalid path"}, status_code=400)
+    full_path = os.path.join(bucket_mgr.media_dir, filepath)
+    if not os.path.isfile(full_path):
+        return JSONResponse({"error": "file not found"}, status_code=404)
+    # Verify path is within media_dir
+    real_path = os.path.realpath(full_path)
+    real_media = os.path.realpath(bucket_mgr.media_dir)
+    if not real_path.startswith(real_media):
+        return JSONResponse({"error": "access denied"}, status_code=403)
+    content_type = mt.guess_type(full_path)[0] or "application/octet-stream"
+    return FileResponse(full_path, media_type=content_type)
+
+
 @mcp.custom_route("/api/buckets/batch", methods=["POST"])
 async def api_bucket_batch(request):
     """Batch operations: delete or resolve multiple buckets."""
