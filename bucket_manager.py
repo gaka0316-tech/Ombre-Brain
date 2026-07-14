@@ -58,6 +58,17 @@ class BucketManager:
         self.dynamic_dir = os.path.join(self.base_dir, "dynamic")
         self.archive_dir = os.path.join(self.base_dir, "archive")
         self.feel_dir = os.path.join(self.base_dir, "feel")
+        self.media_dir = os.path.join(self.base_dir, "_media")
+        os.makedirs(self.media_dir, exist_ok=True)
+        # --- Media persistent storage ---
+        try:
+            from media_store import MediaStore
+            self.media_store = MediaStore(
+                self.base_dir, self.media_dir,
+                max_bytes=int(config.get("media_max_bytes", 25 * 1024 * 1024)),
+            )
+        except ImportError:
+            self.media_store = None
         self.fuzzy_threshold = config.get("matching", {}).get("fuzzy_threshold", 50)
         self.max_results = config.get("matching", {}).get("max_results", 5)
 
@@ -163,7 +174,15 @@ class BucketManager:
         if meaning and meaning.strip():
             metadata["meaning"] = [meaning.strip()]
         if media:
-            metadata["media"] = media[:20]  # max 20 media references per bucket
+            if self.media_store:
+                try:
+                    persisted = [self.media_store._persist_one(bucket_id, item) for item in (media if isinstance(media, list) else [media])]
+                    metadata["media"] = persisted[:20]
+                except Exception as e:
+                    logger.warning(f"Media persistence failed, saving references only: {e}")
+                    metadata["media"] = media[:20]
+            else:
+                metadata["media"] = media[:20]
 
         # --- Assemble Markdown file (frontmatter + body) ---
         # --- 组装 Markdown 文件 ---
@@ -292,6 +311,11 @@ class BucketManager:
                 post["importance"] = 10  # pinned → lock importance to 10
         if "digested" in kwargs:
             post["digested"] = bool(kwargs["digested"])
+        if "anchor" in kwargs:
+            post["anchor"] = bool(kwargs["anchor"])
+            if kwargs["anchor"]:
+                # anchor 与 pinned 互斥
+                post.metadata.pop("pinned", None)
         if "model_valence" in kwargs:
             post["model_valence"] = max(0.0, min(1.0, float(kwargs["model_valence"])))
         # --- Miss: meaning append (hold's emotional anchor) ---
@@ -304,13 +328,28 @@ class BucketManager:
             existing.append(str(kwargs["meaning_append"]).strip())
             post["meaning"] = existing
         if "media" in kwargs:
-            post["media"] = kwargs["media"]
+            if self.media_store:
+                try:
+                    persisted = [self.media_store._persist_one(bucket_id, item) for item in (kwargs["media"] if isinstance(kwargs["media"], list) else [kwargs["media"]])]
+                    post["media"] = persisted
+                except Exception:
+                    post["media"] = kwargs["media"]
+            else:
+                post["media"] = kwargs["media"]
         if "media_append" in kwargs:
             existing_media = post.get("media", [])
             if not isinstance(existing_media, list):
                 existing_media = []
-            existing_media.extend(kwargs["media_append"])
-            post["media"] = existing_media[:20]  # cap at 20
+            if self.media_store:
+                try:
+                    new_items = kwargs["media_append"] if isinstance(kwargs["media_append"], list) else [kwargs["media_append"]]
+                    persisted = [self.media_store._persist_one(bucket_id, item) for item in new_items]
+                    existing_media.extend(persisted)
+                except Exception:
+                    existing_media.extend(kwargs["media_append"] if isinstance(kwargs["media_append"], list) else [kwargs["media_append"]])
+            else:
+                existing_media.extend(kwargs["media_append"] if isinstance(kwargs["media_append"], list) else [kwargs["media_append"]])
+            post["media"] = existing_media[:20]
 
         # --- Auto-refresh activation time / 自动刷新激活时间 ---
         post["last_active"] = now_iso()
@@ -806,3 +845,53 @@ class BucketManager:
                 f"Failed to load bucket file / 加载桶文件失败: {file_path}: {e}"
             )
             return None
+
+    # ===========================================================
+    # Anchor (坐标系): important but intentionally NOT surfaced
+    # ===========================================================
+    ANCHOR_LIMIT = 24
+
+    async def count_anchors(self) -> int:
+        """Return current count of buckets with anchor=True."""
+        all_b = await self.list_all(include_archive=False)
+        return sum(1 for b in all_b if b.get("metadata", {}).get("anchor"))
+
+    async def set_anchor(self, bucket_id: str, value: bool) -> dict:
+        """
+        Toggle the anchor flag on a bucket.
+        anchor=刻意不浮现（坐标系），pinned=永远浮现（核心准则），两者互斥。
+        Returns: {"ok": bool, "anchor": bool, "count": int, "limit": int}
+        """
+        bucket = await self.get(bucket_id)
+        if not bucket:
+            return {"ok": False, "error": "bucket not found", "count": 0, "limit": self.ANCHOR_LIMIT}
+        current_value = bucket["metadata"].get("anchor", False)
+        if isinstance(current_value, str):
+            current_value = current_value.lower() in ("true", "1", "yes")
+        target = bool(value)
+        # Idempotent: same state → noop
+        if current_value == target:
+            count = await self.count_anchors()
+            return {"ok": True, "anchor": target, "count": count, "limit": self.ANCHOR_LIMIT, "noop": True}
+        if target is True:
+            # pinned 与 anchor 互斥
+            if bucket["metadata"].get("pinned") or bucket["metadata"].get("protected"):
+                return {
+                    "ok": False,
+                    "error": "这是 pinned 核心准则，不能同时设为 anchor（两者互斥）。要改成坐标系请先 trace(pinned=0)。",
+                    "count": await self.count_anchors(),
+                    "limit": self.ANCHOR_LIMIT,
+                }
+            count = await self.count_anchors()
+            if count >= self.ANCHOR_LIMIT:
+                return {
+                    "ok": False,
+                    "error": f"anchor 已达上限 {self.ANCHOR_LIMIT}。请先 release 一条再 anchor 新的。",
+                    "count": count,
+                    "limit": self.ANCHOR_LIMIT,
+                }
+        ok = await self.update(bucket_id, anchor=target)
+        if not ok:
+            return {"ok": False, "error": "update failed", "count": 0, "limit": self.ANCHOR_LIMIT}
+        new_count = await self.count_anchors()
+        return {"ok": True, "anchor": target, "count": new_count, "limit": self.ANCHOR_LIMIT}
