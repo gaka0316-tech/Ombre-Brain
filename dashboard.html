@@ -699,6 +699,21 @@
 </div>
 
 <div class="content" id="timeline-view" style="display:none">
+  <div style="margin-bottom:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+    <select id="tl-year" onchange="filterTimeline()" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;">
+      <option value="">全部年份</option>
+    </select>
+    <select id="tl-month" onchange="filterTimeline()" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;">
+      <option value="">全部月份</option>
+    </select>
+    <select id="tl-day" onchange="filterTimeline()" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;">
+      <option value="">全部日期</option>
+    </select>
+    <button onclick="document.getElementById('tl-year').value='';document.getElementById('tl-month').value='';document.getElementById('tl-day').value='';document.getElementById('tl-search').value='';filterTimeline();" style="padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text-dim);font-size:12px;cursor:pointer;">重置</button>
+  </div>
+  <div style="margin-bottom:16px;">
+    <input type="text" id="tl-search" placeholder="在时间线中搜索（含有关键词即显示）…" oninput="filterTimeline()" style="width:100%;padding:8px 14px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;box-sizing:border-box;">
+  </div>
   <div id="timeline-content">
     <div class="loading">加载中…</div>
   </div>
@@ -1537,34 +1552,91 @@ var timelineMonthKeys = [];
 var timelineMonths = {};
 var timelineMonthPage = 0;
 var timelineMonthsPerPage = 3;
+var timelineFiltered = [];
 
 function renderTimeline() {
-  var el = document.getElementById('timeline-content');
   if (!allBuckets.length) {
-    el.innerHTML = '<div class="loading">没有记忆</div>';
+    document.getElementById('timeline-content').innerHTML = '<div class="loading">没有记忆</div>';
     return;
   }
+  // Populate year/month/day dropdowns
+  var years = new Set(), months = new Set(), days = new Set();
+  allBuckets.forEach(function(b) {
+    if (b.created) {
+      var y = b.created.substring(0, 4);
+      var m = b.created.substring(5, 7);
+      var d = b.created.substring(8, 10);
+      if (y) years.add(y);
+      if (m) months.add(m);
+      if (d) days.add(d);
+    }
+  });
+  var yearSel = document.getElementById('tl-year');
+  var oldYear = yearSel.value;
+  yearSel.innerHTML = '<option value="">全部年份</option>';
+  Array.from(years).sort().reverse().forEach(function(y) {
+    yearSel.innerHTML += '<option value="' + y + '">' + y + '年</option>';
+  });
+  yearSel.value = oldYear;
+  var monthSel = document.getElementById('tl-month');
+  var oldMonth = monthSel.value;
+  monthSel.innerHTML = '<option value="">全部月份</option>';
+  Array.from(months).sort().forEach(function(m) {
+    monthSel.innerHTML += '<option value="' + m + '">' + parseInt(m) + '月</option>';
+  });
+  monthSel.value = oldMonth;
+  var daySel = document.getElementById('tl-day');
+  var oldDay = daySel.value;
+  daySel.innerHTML = '<option value="">全部日期</option>';
+  Array.from(days).sort().forEach(function(d) {
+    daySel.innerHTML += '<option value="' + d + '">' + parseInt(d) + '日</option>';
+  });
+  daySel.value = oldDay;
+  filterTimeline();
+}
+
+function filterTimeline() {
+  var el = document.getElementById('timeline-content');
+  var yearVal = document.getElementById('tl-year').value;
+  var monthVal = document.getElementById('tl-month').value;
+  var dayVal = document.getElementById('tl-day').value;
+  var searchVal = (document.getElementById('tl-search').value || '').trim().toLowerCase();
   var sorted = allBuckets.slice().sort(function(a, b) {
     return (b.created || '').localeCompare(a.created || '');
   });
+  var filtered = sorted.filter(function(b) {
+    if (!b.created) return false;
+    if (yearVal && b.created.substring(0, 4) !== yearVal) return false;
+    if (monthVal && b.created.substring(5, 7) !== monthVal) return false;
+    if (dayVal && b.created.substring(8, 10) !== dayVal) return false;
+    if (searchVal) {
+      var haystack = ((b.name || '') + ' ' + (b.content_preview || '') + ' ' + (b.tags || []).join(' ')).toLowerCase();
+      if (haystack.indexOf(searchVal) === -1) return false;
+    }
+    return true;
+  });
+  if (!filtered.length) {
+    el.innerHTML = '<div class="loading" style="color:var(--text-dim);">没有匹配的记忆</div>';
+    return;
+  }
   timelineMonths = {};
-  sorted.forEach(function(b) {
+  filtered.forEach(function(b) {
     var d = b.created ? b.created.substring(0, 7) : '未知';
     if (!timelineMonths[d]) timelineMonths[d] = [];
     timelineMonths[d].push(b);
   });
   timelineMonthKeys = Object.keys(timelineMonths).sort().reverse();
   timelineMonthPage = 1;
-  renderTimelinePage(el);
+  renderTimelinePage(el, filtered.length);
 }
 
-function renderTimelinePage(el) {
+function renderTimelinePage(el, totalCount) {
   if (!el) el = document.getElementById('timeline-content');
   var end = timelineMonthPage * timelineMonthsPerPage;
   var visibleKeys = timelineMonthKeys.slice(0, end);
   var hasMore = end < timelineMonthKeys.length;
   var remaining = timelineMonthKeys.length - end;
-  var html = '';
+  var html = '<div style="margin-bottom:10px;color:var(--text-dim);font-size:12px;">共 ' + (totalCount || '?') + ' 条记忆</div>';
   visibleKeys.forEach(function(m) {
     var label = m;
     try {
