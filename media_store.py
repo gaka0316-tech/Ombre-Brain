@@ -122,7 +122,7 @@ class MediaStore:
                 "stored": False,
             }
 
-        for key, limit in (("title", 200), ("type", 128), ("note", 500)):
+        for key, limit in (("title", 200), ("type", 128), ("note", 500), ("description", 1000)):
             value = entry.get(key)
             if value:
                 result[key] = str(value)[:limit]
