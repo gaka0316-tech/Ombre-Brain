@@ -1260,6 +1260,7 @@ async function loadSettingsStatus() {
       <b>Bucket 总数</b>：${(d.buckets?.total ?? 0)} （永久:${d.buckets?.permanent ?? 0} / 动态:${d.buckets?.dynamic ?? 0} / 归档:${d.buckets?.archive ?? 0}）<br>
       <b>衰减引擎</b>：${d.decay_engine}<br>
       <b>向量搜索</b>：${d.embedding_enabled ? '已启用' : '未启用'}<br>
+      <b>🖼 图片识别</b>：${d.vision?.enabled ? '✅ ' + (d.vision?.model || '') + ' (' + (d.vision?.mode || '') + ')' : '❌ 未配置（需设 OMBRE_VISION_API_KEY）'}<br>
     `;
   } catch(e) {
     el.textContent = '加载失败: ' + e;
