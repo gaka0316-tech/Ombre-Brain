@@ -1993,7 +1993,7 @@ async function showDetail(id) {
         '<div class="field"><label>事件类型</label>' + (meta.event_type || '—') + '</div>' +
         '<div class="field"><label>来源</label>' + (meta.source || '—') + '</div>' +
         (meta.meaning && meta.meaning.length ? '<div class="field"><label>💭 meaning</label>' + meta.meaning.map(function(m) { return esc(m); }).join('<br>') + '</div>' : '') +
-        (meta.media && meta.media.length ? '<div class="field"><label>🖼 media</label>' + meta.media.map(function(m, i) {
+        (meta.media && meta.media.length ? '<div class="field" style="grid-column:1/-1;"><label>🖼 media</label><div style="display:flex;flex-wrap:wrap;gap:12px;">' + meta.media.map(function(m, i) {
           var path = m.path || m;
           var title = m.title || ('图片 ' + (i+1));
           var isStored = m.stored;
@@ -2004,10 +2004,10 @@ async function showDetail(id) {
             ? '<div style="font-size:12px;color:var(--text);margin-top:4px;line-height:1.5;background:var(--bg);padding:6px 8px;border-radius:6px;">📝 ' + esc(desc) + ' <span style="cursor:pointer;color:var(--accent);font-size:11px;" onclick="event.stopPropagation();editMediaDesc(\'' + id + '\',' + i + ',\'' + esc(desc).replace(/'/g, "\\'") + '\')">✏️编辑</span> <span style="cursor:pointer;color:var(--negative);font-size:11px;" onclick="event.stopPropagation();deleteMedia(\'' + id + '\',' + i + ')">🗑删除</span></div>'
             : '<div style="margin-top:4px;"><span style="cursor:pointer;color:var(--accent);font-size:12px;" onclick="event.stopPropagation();editMediaDesc(\'' + id + '\',' + i + ',\'\')">➕ 添加描述</span> <span style="cursor:pointer;color:var(--negative);font-size:12px;" onclick="event.stopPropagation();deleteMedia(\'' + id + '\',' + i + ')">🗑删除</span></div>';
           if (isUrl || isStored) {
-            return '<div style="margin:6px 0;"><img src="' + esc(imgUrl) + '" alt="' + esc(title) + '" style="max-width:200px;max-height:150px;border-radius:6px;border:1px solid var(--border);cursor:pointer;" onclick="openLightbox(\'' + esc(imgUrl) + '\')"><div style="font-size:11px;color:var(--text-dim);">' + esc(title) + (isStored ? ' ✅存储' : '') + '</div>' + descHtml + '</div>';
+            return '<div style="width:220px;"><img src="' + esc(imgUrl) + '" alt="' + esc(title) + '" style="width:100%;max-height:180px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer;" onclick="openLightbox(\'' + esc(imgUrl) + '\')"><div style="font-size:11px;color:var(--text-dim);margin-top:4px;">' + esc(title) + (isStored ? ' ✅存储' : '') + '</div>' + descHtml + '</div>';
           }
-          return '<div style="margin:4px 0;font-size:13px;">' + esc(title) + ': ' + esc(path) + descHtml + '</div>';
-        }).join('') + '</div>' : '') +
+          return '<div style="width:220px;font-size:13px;">' + esc(title) + ': ' + esc(path) + descHtml + '</div>';
+        }).join('') + '</div></div>' : '') +
         '<div class="field"><label>创建</label>' + (meta.created || '—') + '</div>' +
         '<div class="field"><label>最后活跃</label>' + (meta.last_active || '—') + '</div>' +
       '</div>' +
