@@ -1313,8 +1313,10 @@ async def trace(
     content: str = "",
     delete: bool = False,
     meaning: str = "",
+    media_index: int = -1,
+    media_desc: str = "",
 ) -> str:
-    """修改记忆元数据或内容。resolved=1沉底/0激活,pinned=1钉选/0取消,digested=1隐藏(保留但不浮现)/0取消隐藏,content=替换桶正文,delete=True删除。meaning=追加一条情感锚定(不覆盖已有的)。anchor的设置请用anchor()/release()工具。只传需改的,-1或空=不改。"""
+    """修改记忆元数据或内容。resolved=1沉底/0激活,pinned=1钉选/0取消,digested=1隐藏(保留但不浮现)/0取消隐藏,content=替换桶正文,delete=True删除。meaning=追加一条情感锚定(不覆盖已有的)。anchor的设置请用anchor()/release()工具。media_index+media_desc=修改指定图片的描述(索引从0开始)。只传需改的,-1或空=不改。"""
 
     if not bucket_id or not bucket_id.strip():
         return "请提供有效的 bucket_id。"
@@ -1357,6 +1359,14 @@ async def trace(
         updates["content"] = content
     if meaning and meaning.strip():
         updates["meaning_append"] = meaning.strip()
+
+    # --- Media description edit ---
+    if media_index >= 0 and media_desc is not None:
+        media_list = bucket["metadata"].get("media", [])
+        if media_index >= len(media_list):
+            return f"图片索引 {media_index} 超出范围（共 {len(media_list)} 张）。"
+        media_list[media_index]["description"] = media_desc
+        updates["media"] = media_list
 
     if not updates:
         return "没有任何字段需要修改。"
