@@ -675,6 +675,7 @@
   <div class="tab" data-tab="plans">📋 计划</div>
   <div class="tab" data-tab="selfknow">🪞 自我认知</div>
   <div class="tab" data-tab="anchors">⚓ 坐标系</div>
+  <div class="tab" data-tab="gallery">🖼 图库</div>
   <div class="tab" data-tab="config">配置</div>
   <div class="tab" data-tab="import">导入</div>
   <div class="tab" data-tab="settings">设置</div>
@@ -744,6 +745,13 @@
 <div class="content" id="anchors-view" style="display:none">
   <div style="margin-bottom:16px;color:var(--text-dim);font-size:13px;">坐标系桶（anchor）。重要但刻意不在默认 breath 浮现，搜索时仍能找到。与 pinned 互斥。上限 24 个。通过 <code>anchor(bucket_id)</code> 设置，<code>release(bucket_id)</code> 释放。</div>
   <div id="anchors-list">
+    <div class="loading">加载中…</div>
+  </div>
+</div>
+
+<div class="content" id="gallery-view" style="display:none">
+  <div style="margin-bottom:16px;color:var(--text-dim);font-size:13px;">所有上传的图片集中展示。点击图片查看大图，点击记忆名称跳转到详情。</div>
+  <div id="gallery-list">
     <div class="loading">加载中…</div>
   </div>
 </div>
@@ -1373,6 +1381,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.getElementById('plans-view').style.display = target === 'plans' ? '' : 'none';
     document.getElementById('selfknow-view').style.display = target === 'selfknow' ? '' : 'none';
     document.getElementById('anchors-view').style.display = target === 'anchors' ? '' : 'none';
+    document.getElementById('gallery-view').style.display = target === 'gallery' ? '' : 'none';
     document.getElementById('breath-view').style.display = target === 'breath' ? '' : 'none';
     document.getElementById('network-view').style.display = target === 'network' ? '' : 'none';
     document.getElementById('config-view').style.display = target === 'config' ? '' : 'none';
@@ -1384,6 +1393,7 @@ document.querySelectorAll('.tab').forEach(tab => {
     if (target === 'plans') renderPlans();
     if (target === 'selfknow') renderSelfknow();
     if (target === 'anchors') renderAnchors();
+    if (target === 'gallery') renderGallery();
     if (target === 'network' && !networkLoaded) loadNetwork();
     if (target === 'config') loadConfig();
     if (target === 'import') { pollImportStatus(); loadImportResults(); }
@@ -1843,6 +1853,78 @@ function renderAnchors() {
   el.innerHTML = html;
 }
 
+function renderGallery() {
+  var el = document.getElementById('gallery-list');
+  var items = [];
+  allBuckets.forEach(function(b) {
+    var meta = b;
+    if (!meta._fullMedia) return;
+    meta._fullMedia.forEach(function(m) {
+      if (!m || !m.path) return;
+      items.push({ media: m, bucketId: b.id, bucketName: b.name || b.id.substring(0,12), created: b.created || '' });
+    });
+  });
+  if (!items.length) {
+    // Try fetching full media from API for each bucket that has media
+    var mediaBuckets = allBuckets.filter(function(b) { return b.content_preview && b.content_preview.indexOf('media') !== -1; });
+    el.innerHTML = '<div class="loading" style="color:var(--text-dim);">还没有上传过图片。在记忆详情里点🖼上传图片即可</div>';
+    // Async load media from all buckets
+    (async function() {
+      var gallery = [];
+      for (var b of allBuckets) {
+        try {
+          var res = await authFetch(BASE + '/api/bucket/' + b.id);
+          if (!res.ok) continue;
+          var data = await res.json();
+          var media = (data.metadata || {}).media || [];
+          if (media.length) {
+            media.forEach(function(m) {
+              gallery.push({ media: m, bucketId: b.id, bucketName: (data.metadata || {}).name || b.id.substring(0,12), created: (data.metadata || {}).created || '' });
+            });
+          }
+        } catch(e) { continue; }
+      }
+      if (!gallery.length) {
+        el.innerHTML = '<div class="loading" style="color:var(--text-dim);">还没有上传过图片。在记忆详情里点 🖼上传图片 即可</div>';
+        return;
+      }
+      gallery.sort(function(a, b) { return (b.created || '').localeCompare(a.created || ''); });
+      var html = '<div style="margin-bottom:12px;color:var(--text-dim);font-size:13px;">共 ' + gallery.length + ' 张图片</div>';
+      html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;">';
+      gallery.forEach(function(item) {
+        var m = item.media;
+        var path = m.path || '';
+        var title = m.title || '图片';
+        var desc = m.description || '';
+        var isUrl = path.startsWith('http') || path.startsWith('data:');
+        var imgUrl = isUrl ? path : (m.stored ? (BASE + '/api/media/' + path) : path);
+        html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;">' +
+          '<img src="' + esc(imgUrl) + '" alt="' + esc(title) + '" style="width:100%;height:140px;object-fit:cover;cursor:pointer;" onclick="openLightbox(\'' + esc(imgUrl) + '\')">' +
+          '<div style="padding:8px;">' +
+            '<div style="font-size:12px;color:var(--text);font-weight:600;cursor:pointer;text-decoration:underline;" onclick="showDetail(\'' + item.bucketId + '\')">' + esc(item.bucketName) + '</div>' +
+            '<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">' + esc(title) + '</div>' +
+            (desc ? '<div style="font-size:11px;color:var(--text);margin-top:4px;line-height:1.4;">📝 ' + esc(desc.substring(0,60)) + (desc.length > 60 ? '…' : '') + '</div>' : '') +
+          '</div>' +
+        '</div>';
+      });
+      html += '</div>';
+      el.innerHTML = html;
+    })();
+    return;
+  }
+}
+
+function openLightbox(url) {
+  var overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:pointer;';
+  overlay.onclick = function() { document.body.removeChild(overlay); };
+  var img = document.createElement('img');
+  img.src = url;
+  img.style.cssText = 'max-width:90%;max-height:90%;border-radius:8px;box-shadow:0 4px 30px rgba(0,0,0,0.5);';
+  overlay.appendChild(img);
+  document.body.appendChild(overlay);
+}
+
 async function searchBuckets(query) {
   try {
     var res = await fetch(BASE + '/api/search?q=' + encodeURIComponent(query));
@@ -1887,11 +1969,13 @@ async function showDetail(id) {
           var path = m.path || m;
           var title = m.title || ('图片 ' + (i+1));
           var isStored = m.stored;
+          var desc = m.description || '';
           var isUrl = typeof path === 'string' && (path.startsWith('http') || path.startsWith('data:'));
+          var imgUrl = isUrl ? path : (isStored ? (BASE + '/api/media/' + path) : path);
           if (isUrl || isStored) {
-            return '<div style="margin:4px 0;"><img src="' + esc(path) + '" alt="' + esc(title) + '" style="max-width:200px;max-height:150px;border-radius:6px;border:1px solid var(--border);cursor:pointer;" onclick="window.open(\'' + esc(path) + '\',\'_blank\')"><div style="font-size:11px;color:var(--text-dim);">' + esc(title) + (isStored ? ' ✅存储' : '') + '</div></div>';
+            return '<div style="margin:4px 0;"><img src="' + esc(imgUrl) + '" alt="' + esc(title) + '" style="max-width:200px;max-height:150px;border-radius:6px;border:1px solid var(--border);cursor:pointer;" onclick="window.open(\'' + esc(imgUrl) + '\',\'_blank\')"><div style="font-size:11px;color:var(--text-dim);">' + esc(title) + (isStored ? ' ✅存储' : '') + '</div>' + (desc ? '<div style="font-size:12px;color:var(--text);margin-top:4px;line-height:1.5;">📝 ' + esc(desc) + '</div>' : '') + '</div>';
           }
-          return '<div style="margin:2px 0;font-size:13px;">' + esc(title) + ': ' + esc(path) + '</div>';
+          return '<div style="margin:2px 0;font-size:13px;">' + esc(title) + ': ' + esc(path) + (desc ? '<br><span style="font-size:12px;color:var(--text);">📝 ' + esc(desc) + '</span>' : '') + '</div>';
         }).join('') + '</div>' : '') +
         '<div class="field"><label>创建</label>' + (meta.created || '—') + '</div>' +
         '<div class="field"><label>最后活跃</label>' + (meta.last_active || '—') + '</div>' +
