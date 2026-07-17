@@ -2199,7 +2199,7 @@ async def _describe_image(base64_data: str, mime_type: str = "image/jpeg") -> st
                             "role": "user",
                             "content": [
                                 {"type": "image_url", "image_url": {"url": data_uri}},
-                                {"type": "text", "text": "你是一个人的私人相册记录者，用他的视角写。像在跟最亲的人翻相册时随口说的话一样，温暖、自然、带感情。注意人物的表情、穿着、动作、氛围。不要用'这张照片展示了''这是一张'这类开头。2-3句话。"},
+                                {"type": "text", "text": "先准确描述图片内容（人物外貌、穿着、动作、场景、物品），再用温暖自然的语气补充氛围和情绪。第一句写清楚画面里有什么，后面写感觉。不要用'这张照片展示了''这是一张'开头。2-3句话，中文。"},
                             ],
                         }],
                     },
@@ -2224,7 +2224,7 @@ async def _describe_image(base64_data: str, mime_type: str = "image/jpeg") -> st
                             "role": "user",
                             "content": [
                                 {"type": "image", "source": {"type": "base64", "media_type": mime_type, "data": base64_data}},
-                                {"type": "text", "text": "你是一个人的私人相册记录者，用他的视角写。像在跟最亲的人翻相册时随口说的话一样，温暖、自然、带感情。注意人物的表情、穿着、动作、氛围。不要用'这张照片展示了''这是一张'这类开头。2-3句话。"},
+                                {"type": "text", "text": "先准确描述图片内容（人物外貌、穿着、动作、场景、物品），再用温暖自然的语气补充氛围和情绪。第一句写清楚画面里有什么，后面写感觉。不要用'这张照片展示了''这是一张'开头。2-3句话，中文。"},
                             ],
                         }],
                     },
