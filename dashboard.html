@@ -1907,118 +1907,78 @@ function renderGallery() {
 async function addMeaning(bucketId) {
   var text = prompt('添加情感锚定：');
   if (!text) return;
+  var meaning = (_currentDetail && _currentDetail.metadata ? _currentDetail.metadata.meaning : null) || [];
+  meaning.push(text);
   try {
-    var res = await authFetch(BASE + '/api/bucket/' + bucketId);
-    if (!res.ok) { alert('获取记忆失败'); return; }
-    var b = await res.json();
-    var meaning = (b.metadata || {}).meaning || [];
-    meaning.push(text);
-    var updateRes = await authFetch(BASE + '/api/bucket/' + bucketId, {
+    var res = await authFetch(BASE + '/api/bucket/' + bucketId, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ meaning: meaning })
     });
-    if (updateRes.ok) {
-      showDetail(bucketId);
-    } else {
-      alert('添加失败');
-    }
+    if (res.ok) { showDetail(bucketId); } else { alert('添加失败'); }
   } catch(e) { alert('添加出错: ' + e.message); }
 }
 
-async function editMeaning(bucketId, index, currentText) {
-  var newText = prompt('编辑情感锚定：', currentText);
+async function editMeaning(bucketId, index) {
+  var meaning = (_currentDetail && _currentDetail.metadata ? _currentDetail.metadata.meaning : null) || [];
+  if (index >= meaning.length) { alert('索引无效'); return; }
+  var newText = prompt('编辑情感锚定：', meaning[index]);
   if (newText === null) return;
+  meaning[index] = newText;
   try {
-    var res = await authFetch(BASE + '/api/bucket/' + bucketId);
-    if (!res.ok) { alert('获取记忆失败'); return; }
-    var b = await res.json();
-    var meaning = (b.metadata || {}).meaning || [];
-    if (index >= meaning.length) { alert('索引无效'); return; }
-    meaning[index] = newText;
-    var updateRes = await authFetch(BASE + '/api/bucket/' + bucketId, {
+    var res = await authFetch(BASE + '/api/bucket/' + bucketId, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ meaning: meaning })
     });
-    if (updateRes.ok) {
-      showDetail(bucketId);
-    } else {
-      alert('保存失败');
-    }
+    if (res.ok) { showDetail(bucketId); } else { alert('保存失败'); }
   } catch(e) { alert('编辑出错: ' + e.message); }
 }
 
 async function deleteMeaning(bucketId, index) {
   if (!confirm('确定删除这条情感锚定？')) return;
+  var meaning = (_currentDetail && _currentDetail.metadata ? _currentDetail.metadata.meaning : null) || [];
+  if (index >= meaning.length) { alert('索引无效'); return; }
+  meaning.splice(index, 1);
   try {
-    var res = await authFetch(BASE + '/api/bucket/' + bucketId);
-    if (!res.ok) { alert('获取记忆失败'); return; }
-    var b = await res.json();
-    var meaning = (b.metadata || {}).meaning || [];
-    if (index >= meaning.length) { alert('索引无效'); return; }
-    meaning.splice(index, 1);
-    var updateRes = await authFetch(BASE + '/api/bucket/' + bucketId, {
+    var res = await authFetch(BASE + '/api/bucket/' + bucketId, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ meaning: meaning })
     });
-    if (updateRes.ok) {
-      showDetail(bucketId);
-    } else {
-      alert('删除失败');
-    }
+    if (res.ok) { showDetail(bucketId); } else { alert('删除失败'); }
   } catch(e) { alert('删除出错: ' + e.message); }
 }
 
 async function deleteMedia(bucketId, mediaIndex) {
   if (!confirm('确定删除这张图片？')) return;
+  var media = (_currentDetail && _currentDetail.metadata ? _currentDetail.metadata.media : null) || [];
+  if (mediaIndex >= media.length) { alert('图片索引无效'); return; }
+  media.splice(mediaIndex, 1);
   try {
-    var res = await authFetch(BASE + '/api/bucket/' + bucketId);
-    if (!res.ok) { alert('获取记忆失败'); return; }
-    var b = await res.json();
-    var media = (b.metadata || {}).media || [];
-    if (mediaIndex >= media.length) { alert('图片索引无效'); return; }
-    media.splice(mediaIndex, 1);
-    var updateRes = await authFetch(BASE + '/api/bucket/' + bucketId, {
+    var res = await authFetch(BASE + '/api/bucket/' + bucketId, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ media: media })
     });
-    if (updateRes.ok) {
-      alert('已删除');
-      showDetail(bucketId);
-    } else {
-      alert('删除失败');
-    }
-  } catch(e) {
-    alert('删除出错: ' + e.message);
-  }
+    if (res.ok) { alert('已删除'); showDetail(bucketId); } else { alert('删除失败'); }
+  } catch(e) { alert('删除出错: ' + e.message); }
 }
 
 async function editMediaDesc(bucketId, mediaIndex, currentDesc) {
   var newDesc = prompt('编辑图片描述：', currentDesc);
   if (newDesc === null) return;
+  var media = (_currentDetail && _currentDetail.metadata ? _currentDetail.metadata.media : null) || [];
+  if (mediaIndex >= media.length) { alert('图片索引无效'); return; }
+  media[mediaIndex].description = newDesc;
   try {
-    var res = await authFetch(BASE + '/api/bucket/' + bucketId);
-    if (!res.ok) { alert('获取记忆失败'); return; }
-    var b = await res.json();
-    var media = (b.metadata || {}).media || [];
-    if (mediaIndex >= media.length) { alert('图片索引无效'); return; }
-    media[mediaIndex].description = newDesc;
-    var updateRes = await authFetch(BASE + '/api/bucket/' + bucketId, {
+    var res = await authFetch(BASE + '/api/bucket/' + bucketId, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ media: media })
     });
-    if (updateRes.ok) {
-      showDetail(bucketId);
-    } else {
-      alert('保存失败');
-    }
-  } catch(e) {
-    alert('编辑出错: ' + e.message);
-  }
+    if (res.ok) { showDetail(bucketId); } else { alert('保存失败'); }
+  } catch(e) { alert('编辑出错: ' + e.message); }
 }
 
 function openLightbox(url) {
@@ -2042,6 +2002,8 @@ async function searchBuckets(query) {
   }
 }
 
+var _currentDetail = null; // Cache for current detail panel data
+
 async function showDetail(id) {
   var panel = document.getElementById('detail-panel');
   var content = document.getElementById('detail-content');
@@ -2051,6 +2013,7 @@ async function showDetail(id) {
   try {
     var res = await fetch(BASE + '/api/bucket/' + id);
     var b = await res.json();
+    _currentDetail = b; // Cache it
     var meta = b.metadata || {};
     content.innerHTML =
       '<h2>' + esc(meta.name || id) + '</h2>' +
@@ -2071,7 +2034,7 @@ async function showDetail(id) {
         '<div class="field"><label>⚓ 坐标系</label>' + (meta.anchor ? '✓' : '—') + '</div>' +
         '<div class="field"><label>事件类型</label>' + (meta.event_type || '—') + '</div>' +
         '<div class="field"><label>来源</label>' + (meta.source || '—') + '</div>' +
-        '<div class="field" style="grid-column:1/-1;"><label>💭 meaning</label>' + (meta.meaning && meta.meaning.length ? meta.meaning.map(function(m, i) { return '<div style="margin:4px 0;padding:6px 8px;background:var(--bg);border-radius:6px;font-size:13px;line-height:1.5;">' + esc(m) + ' <span style="cursor:pointer;color:var(--accent);font-size:11px;" onclick="editMeaning(\'' + id + '\',' + i + ',\'' + esc(m).replace(/'/g, "\\'") + '\')">✏️编辑</span> <span style="cursor:pointer;color:var(--negative);font-size:11px;" onclick="deleteMeaning(\'' + id + '\',' + i + ')">🗑删除</span></div>'; }).join('') : '') + '<div style="margin-top:4px;"><span style="cursor:pointer;color:var(--accent);font-size:12px;" onclick="addMeaning(\'' + id + '\')">➕ 添加情感锚定</span></div></div>' +
+        '<div class="field" style="grid-column:1/-1;"><label>💭 meaning</label>' + (meta.meaning && meta.meaning.length ? meta.meaning.map(function(m, i) { return '<div style="margin:4px 0;padding:6px 8px;background:var(--bg);border-radius:6px;font-size:13px;line-height:1.5;">' + esc(m) + ' <span style="cursor:pointer;color:var(--accent);font-size:11px;" onclick="editMeaning(\'' + id + '\',' + i + ')">✏️编辑</span> <span style="cursor:pointer;color:var(--negative);font-size:11px;" onclick="deleteMeaning(\'' + id + '\',' + i + ')">🗑删除</span></div>'; }).join('') : '') + '<div style="margin-top:4px;"><span style="cursor:pointer;color:var(--accent);font-size:12px;" onclick="addMeaning(\'' + id + '\')">➕ 添加情感锚定</span></div></div>' +
         (meta.media && meta.media.length ? '<div class="field" style="grid-column:1/-1;"><label>🖼 media</label><div style="display:flex;flex-wrap:wrap;gap:12px;">' + meta.media.map(function(m, i) {
           var path = m.path || m;
           var title = m.title || ('图片 ' + (i+1));
