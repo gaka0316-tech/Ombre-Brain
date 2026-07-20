@@ -1313,10 +1313,12 @@ async def trace(
     content: str = "",
     delete: bool = False,
     meaning: str = "",
+    meaning_index: int = -1,
+    meaning_delete: int = -1,
     media_index: int = -1,
     media_desc: str = "",
 ) -> str:
-    """修改记忆元数据或内容。resolved=1沉底/0激活,pinned=1钉选/0取消,digested=1隐藏(保留但不浮现)/0取消隐藏,content=替换桶正文,delete=True删除。meaning=追加一条情感锚定(不覆盖已有的)。anchor的设置请用anchor()/release()工具。media_index+media_desc=修改指定图片的描述(索引从0开始)。只传需改的,-1或空=不改。"""
+    """修改记忆元数据或内容。resolved=1沉底/0激活,pinned=1钉选/0取消,digested=1隐藏(保留但不浮现)/0取消隐藏,content=替换桶正文,delete=True删除。meaning=追加一条情感锚定(不覆盖已有的)。meaning_index+meaning=编辑指定meaning(索引从0开始)。meaning_delete=删除指定meaning(索引从0开始)。anchor的设置请用anchor()/release()工具。media_index+media_desc=修改指定图片的描述(索引从0开始)。只传需改的,-1或空=不改。"""
 
     if not bucket_id or not bucket_id.strip():
         return "请提供有效的 bucket_id。"
@@ -1358,7 +1360,24 @@ async def trace(
     if content:
         updates["content"] = content
     if meaning and meaning.strip():
-        updates["meaning_append"] = meaning.strip()
+        if meaning_index >= 0:
+            # Edit existing meaning at index
+            meaning_list = bucket["metadata"].get("meaning", [])
+            if meaning_index >= len(meaning_list):
+                return f"meaning索引 {meaning_index} 超出范围（共 {len(meaning_list)} 条）。"
+            meaning_list[meaning_index] = meaning.strip()
+            updates["meaning"] = meaning_list
+        else:
+            # Append new meaning
+            updates["meaning_append"] = meaning.strip()
+
+    # --- Meaning delete ---
+    if meaning_delete >= 0:
+        meaning_list = bucket["metadata"].get("meaning", [])
+        if meaning_delete >= len(meaning_list):
+            return f"meaning索引 {meaning_delete} 超出范围（共 {len(meaning_list)} 条）。"
+        meaning_list.pop(meaning_delete)
+        updates["meaning"] = meaning_list
 
     # --- Media description edit ---
     if media_index >= 0 and media_desc is not None:
@@ -1960,6 +1979,8 @@ async def api_buckets(request):
                 "score": decay_engine.calculate_score(meta),
                 "content_preview": strip_wikilinks(b.get("content", ""))[:200],
                 "media": meta.get("media", []),
+                "meaning": meta.get("meaning", []),
+                "source": meta.get("source", ""),
             })
         result.sort(key=lambda x: x["score"], reverse=True)
         return JSONResponse(result)
@@ -2135,6 +2156,8 @@ async def api_bucket_update(request):
         updates["digested"] = bool(body["digested"])
     if "media" in body:
         updates["media"] = body["media"] if isinstance(body["media"], list) else []
+    if "meaning" in body:
+        updates["meaning"] = body["meaning"] if isinstance(body["meaning"], list) else []
 
     if not updates:
         return JSONResponse({"error": "no fields to update"}, status_code=400)
