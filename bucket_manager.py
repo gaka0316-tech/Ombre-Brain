@@ -404,6 +404,57 @@ class BucketManager:
         return True
 
     # ---------------------------------------------------------
+    # Partial content replacement (old_str → new_str)
+    # 局部内容替换（old_str → new_str）
+    # Atomically replaces one unique fragment in bucket body.
+    # 原子性地替换桶正文中唯一匹配的片段。
+    # ---------------------------------------------------------
+    async def update_content_fragment(
+        self, bucket_id: str, *, old_str: str, new_str: str, **kwargs
+    ) -> dict:
+        """
+        Replace one unique literal fragment in a bucket's body text.
+        old_str must appear exactly once; zero or multiple matches are rejected.
+        new_str may be empty (deletes the matched fragment).
+        Additional kwargs are applied as metadata updates alongside the patch.
+        局部替换桶正文中唯一匹配的片段。old_str 必须恰好出现一次。
+        """
+        old_text = str(old_str)
+        replacement = str(new_str)
+        if not old_text:
+            return {"ok": False, "error": "empty_old_str"}
+        if "content" in kwargs:
+            return {"ok": False, "error": "content_conflict"}
+
+        file_path = self._find_bucket_file(bucket_id)
+        if not file_path:
+            return {"ok": False, "error": "not_found"}
+        try:
+            post = frontmatter.load(file_path)
+        except Exception as exc:
+            logger.warning(f"Failed to load bucket for content patch {bucket_id}: {exc}")
+            return {"ok": False, "error": "read_failed"}
+
+        current_content = str(post.content or "")
+        first_match = current_content.find(old_text)
+        if first_match < 0:
+            return {"ok": False, "error": "old_str_not_found"}
+        second_match = current_content.find(old_text, first_match + 1)
+        if second_match >= 0:
+            return {"ok": False, "error": "old_str_ambiguous"}
+
+        updated_content = current_content.replace(old_text, replacement, 1)
+        if updated_content == current_content:
+            return {"ok": False, "error": "unchanged"}
+        if not updated_content.strip():
+            return {"ok": False, "error": "invalid_content",
+                    "message": "替换后正文不能为空；如需移除整个桶，请使用 delete。"}
+
+        kwargs["content"] = updated_content
+        success = await self.update(bucket_id, **kwargs)
+        return {"ok": success, "error": "" if success else "update_failed"}
+
+    # ---------------------------------------------------------
     # Touch bucket (refresh activation time + increment count)
     # 触碰桶（刷新激活时间 + 累加激活次数）
     # Called on every recall hit; affects decay score.
