@@ -1320,7 +1320,7 @@ async def trace(
     old_str: str = "",
     new_str: str = None,
 ) -> str:
-    """修改记忆元数据或内容。resolved=1沉底/0激活,pinned=1钉选/0取消,digested=1隐藏(保留但不浮现)/0取消隐藏,content=替换桶正文,delete=True删除。meaning=追加一条情感锚定(不覆盖已有的)。meaning_index+meaning=编辑指定meaning(索引从0开始)。meaning_delete=删除指定meaning(索引从0开始)。anchor的设置请用anchor()/release()工具。media_index+media_desc=修改指定图片的描述(索引从0开始)。old_str+new_str=局部替换正文(old_str必须在正文中唯一出现,new_str可为空字符串表示删除片段;不能与content同时使用)。只传需改的,-1或空=不改。"""
+    """修改记忆元数据或内容。resolved=1沉底/0激活,pinned=1钉选/0取消,digested=1隐藏(保留但不浮现)/0取消隐藏,content=替换桶正文,delete=True删除。meaning=追加一条情感锚定(不覆盖已有的)。meaning_index+meaning=编辑指定meaning(索引从0开始)。meaning_delete=删除指定meaning(索引从0开始)。anchor的设置请用anchor()/release()工具。media_index+media_desc=修改指定图片的描述(索引从0开始)。old_str+new_str=局部替换正文(old_str必须在正文中唯一出现,new_str可为空字符串表示删除片段;不能与content同时使用)。old_str+new_str+meaning_index=局部替换指定meaning中的片段。只传需改的,-1或空=不改。"""
 
     if not bucket_id or not bucket_id.strip():
         return "请提供有效的 bucket_id。"
@@ -1407,9 +1407,38 @@ async def trace(
     if not updates and not patch_mode:
         return "没有任何字段需要修改。"
 
-    # --- Patch mode: partial content replacement ---
-    # --- 局部替换模式 ---
+    # --- Patch mode: partial content or meaning replacement ---
+    # --- 局部替换模式（正文 or meaning）---
     if patch_mode:
+        # meaning局部替换：old_str/new_str + meaning_index
+        if meaning_index >= 0:
+            meaning_list = bucket["metadata"].get("meaning", [])
+            if meaning_index >= len(meaning_list):
+                return f"meaning索引 {meaning_index} 超出范围（共 {len(meaning_list)} 条）。"
+            current_meaning = str(meaning_list[meaning_index])
+            if old_str not in current_meaning:
+                return (
+                    f"未找到 old_str，第{meaning_index}条meaning未修改。"
+                    "请核对当前内容后重试。"
+                )
+            if current_meaning.count(old_str) > 1:
+                return (
+                    f"old_str 在第{meaning_index}条meaning中出现了多次，"
+                    "请提供更长且唯一的片段。"
+                )
+            updated_meaning = current_meaning.replace(old_str, new_str, 1)
+            if updated_meaning == current_meaning:
+                return "old_str 与 new_str 替换后meaning没有变化。"
+            if not updated_meaning.strip():
+                return "替换后meaning不能为空；如需删除请用 meaning_delete。"
+            meaning_list[meaning_index] = updated_meaning
+            updates["meaning"] = meaning_list
+            success = await bucket_mgr.update(bucket_id, **updates)
+            if not success:
+                return f"修改失败: {bucket_id}"
+            return f"已修改记忆桶 {bucket_id}: 第{meaning_index}条meaning已局部替换"
+
+        # 正文局部替换：old_str/new_str（无meaning_index）
         patch_result = await bucket_mgr.update_content_fragment(
             bucket_id, old_str=old_str, new_str=new_str, **updates
         )
