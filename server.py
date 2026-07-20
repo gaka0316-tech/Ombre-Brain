@@ -1317,11 +1317,28 @@ async def trace(
     meaning_delete: int = -1,
     media_index: int = -1,
     media_desc: str = "",
+    old_str: str = "",
+    new_str: str = None,
 ) -> str:
-    """修改记忆元数据或内容。resolved=1沉底/0激活,pinned=1钉选/0取消,digested=1隐藏(保留但不浮现)/0取消隐藏,content=替换桶正文,delete=True删除。meaning=追加一条情感锚定(不覆盖已有的)。meaning_index+meaning=编辑指定meaning(索引从0开始)。meaning_delete=删除指定meaning(索引从0开始)。anchor的设置请用anchor()/release()工具。media_index+media_desc=修改指定图片的描述(索引从0开始)。只传需改的,-1或空=不改。"""
+    """修改记忆元数据或内容。resolved=1沉底/0激活,pinned=1钉选/0取消,digested=1隐藏(保留但不浮现)/0取消隐藏,content=替换桶正文,delete=True删除。meaning=追加一条情感锚定(不覆盖已有的)。meaning_index+meaning=编辑指定meaning(索引从0开始)。meaning_delete=删除指定meaning(索引从0开始)。anchor的设置请用anchor()/release()工具。media_index+media_desc=修改指定图片的描述(索引从0开始)。old_str+new_str=局部替换正文(old_str必须在正文中唯一出现,new_str可为空字符串表示删除片段;不能与content同时使用)。只传需改的,-1或空=不改。"""
 
     if not bucket_id or not bucket_id.strip():
         return "请提供有效的 bucket_id。"
+
+    # --- Partial content patch: old_str/new_str validation ---
+    # --- 局部替换校验 ---
+    new_str_provided = new_str is not None
+    old_str = "" if old_str is None else str(old_str)
+    new_str = "" if new_str is None else str(new_str)
+    patch_mode = bool(old_str) or new_str_provided
+    if patch_mode and delete:
+        return "参数冲突：old_str/new_str 局部替换不能与 delete 同时使用。"
+    if patch_mode and content:
+        return "参数冲突：不能同时使用 content 完整替换和 old_str/new_str 局部替换。"
+    if patch_mode and (not old_str or not new_str_provided):
+        return "局部替换必须同时提供 old_str 和 new_str；new_str 可以是空字符串表示删除片段。"
+    if patch_mode and old_str == new_str:
+        return "old_str 与 new_str 完全相同，没有内容需要替换。"
 
     # --- Delete mode / 删除模式 ---
     if delete:
@@ -1387,9 +1404,49 @@ async def trace(
         media_list[media_index]["description"] = media_desc
         updates["media"] = media_list
 
-    if not updates:
+    if not updates and not patch_mode:
         return "没有任何字段需要修改。"
 
+    # --- Patch mode: partial content replacement ---
+    # --- 局部替换模式 ---
+    if patch_mode:
+        patch_result = await bucket_mgr.update_content_fragment(
+            bucket_id, old_str=old_str, new_str=new_str, **updates
+        )
+        if not patch_result.get("ok"):
+            patch_error = patch_result.get("error")
+            if patch_error == "not_found":
+                return f"未找到记忆桶: {bucket_id}"
+            if patch_error == "old_str_not_found":
+                return (
+                    "未找到 old_str，正文未修改。请核对当前原文，"
+                    "复制连续且逐字一致的片段后重试。"
+                )
+            if patch_error == "old_str_ambiguous":
+                return (
+                    "old_str 在正文中出现了多次，无法确定要修改哪一处；"
+                    "正文未修改。请提供更长且唯一的原文片段。"
+                )
+            if patch_error == "invalid_content":
+                return str(patch_result.get("message") or "替换后的内容不符合存储限制。")
+            if patch_error == "unchanged":
+                return "old_str 与 new_str 替换后正文没有变化。"
+            return f"修改失败: {bucket_id}"
+        # Re-generate embedding after patch
+        try:
+            patched_bucket = await bucket_mgr.get(bucket_id)
+            if patched_bucket:
+                await embedding_engine.generate_and_store(bucket_id, patched_bucket["content"])
+        except Exception:
+            pass
+        meta_changed = ", ".join(f"{k}={v}" for k, v in updates.items())
+        parts = ["content=已局部替换"]
+        if meta_changed:
+            parts.append(meta_changed)
+        return f"已修改记忆桶 {bucket_id}: {', '.join(parts)}"
+
+    # --- Normal update mode ---
+    # --- 常规更新模式 ---
     success = await bucket_mgr.update(bucket_id, **updates)
     if not success:
         return f"修改失败: {bucket_id}"
