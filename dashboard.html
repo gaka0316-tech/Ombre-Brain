@@ -1904,6 +1904,50 @@ function renderGallery() {
   el.innerHTML = html;
 }
 
+// --- Detail field inline editing ---
+// --- 详情面板字段编辑 ---
+async function editDetailField(bucketId, field, currentValue, type) {
+  var labels = {valence:'事件效价 (0-1)',arousal:'唤醒度 (0-1)',importance:'重要度 (1-10)',event_type:'事件类型',source:'来源（框名/日期）'};
+  var newVal = prompt(labels[field] || field, currentValue);
+  if (newVal === null) return;
+  var body = {};
+  if (type === 'number') {
+    var n = parseFloat(newVal);
+    if (isNaN(n)) { alert('请输入有效数字'); return; }
+    body[field] = n;
+  } else if (type === 'int') {
+    var i = parseInt(newVal);
+    if (isNaN(i)) { alert('请输入有效整数'); return; }
+    body[field] = i;
+  } else {
+    body[field] = newVal;
+  }
+  try {
+    var res = await authFetch(BASE + '/api/bucket/' + bucketId, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (res.ok) { showDetail(bucketId); } else { alert('修改失败'); }
+  } catch(e) { alert('修改出错: ' + e.message); }
+}
+
+async function toggleDetailFlag(bucketId, field, currentValue) {
+  var labels = {resolved:'已解决',digested:'已消化',pinned:'钉选',anchor:'坐标系'};
+  var newVal = !currentValue;
+  if (!confirm((labels[field]||field) + '：' + (currentValue ? '✓→—（取消）' : '—→✓（启用）') + '？')) return;
+  var body = {};
+  body[field] = newVal;
+  try {
+    var res = await authFetch(BASE + '/api/bucket/' + bucketId, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (res.ok) { showDetail(bucketId); } else { alert('修改失败'); }
+  } catch(e) { alert('修改出错: ' + e.message); }
+}
+
 async function addMeaning(bucketId) {
   var text = prompt('添加情感锚定：');
   if (!text) return;
@@ -2022,18 +2066,18 @@ async function showDetail(id) {
         '<div class="field"><label>类型</label>' + (meta.type || 'dynamic') + '</div>' +
         '<div class="field"><label>域</label>' + (meta.domain || []).join(', ') + '</div>' +
         '<div class="field"><label>标签</label>' + (meta.tags || []).join(', ') + '</div>' +
-        '<div class="field"><label>事件效价</label>V' + (meta.valence || 0.5).toFixed(2) + '</div>' +
-        '<div class="field"><label>唤醒度</label>A' + (meta.arousal || 0.3).toFixed(2) + '</div>' +
+        '<div class="field"><label>事件效价</label><span style="cursor:pointer;" onclick="editDetailField(\'' + id + '\',\'valence\',\'' + (meta.valence || 0.5) + '\',\'number\')">V' + (meta.valence || 0.5).toFixed(2) + ' ✏️</span></div>' +
+        '<div class="field"><label>唤醒度</label><span style="cursor:pointer;" onclick="editDetailField(\'' + id + '\',\'arousal\',\'' + (meta.arousal || 0.3) + '\',\'number\')">A' + (meta.arousal || 0.3).toFixed(2) + ' ✏️</span></div>' +
         '<div class="field"><label>模型视角</label>' + (meta.model_valence != null ? 'V' + meta.model_valence.toFixed(2) : '—') + '</div>' +
-        '<div class="field"><label>重要度</label>' + (meta.importance || 5) + '/10</div>' +
+        '<div class="field"><label>重要度</label><span style="cursor:pointer;" onclick="editDetailField(\'' + id + '\',\'importance\',\'' + (meta.importance || 5) + '\',\'int\')"> ' + (meta.importance || 5) + '/10 ✏️</span></div>' +
         '<div class="field"><label>权重分</label>' + b.score.toFixed(4) + '</div>' +
         '<div class="field"><label>激活次数</label>' + (meta.activation_count || 1) + '</div>' +
-        '<div class="field"><label>已解决</label>' + (meta.resolved ? '✓' : '—') + '</div>' +
-        '<div class="field"><label>已消化</label>' + (meta.digested ? '✓' : '—') + '</div>' +
-        '<div class="field"><label>钉选</label>' + (meta.pinned ? '✓' : '—') + '</div>' +
-        '<div class="field"><label>⚓ 坐标系</label>' + (meta.anchor ? '✓' : '—') + '</div>' +
-        '<div class="field"><label>事件类型</label>' + (meta.event_type || '—') + '</div>' +
-        '<div class="field"><label>来源</label>' + (meta.source || '—') + '</div>' +
+        '<div class="field"><label>已解决</label><span style="cursor:pointer;" onclick="toggleDetailFlag(\'' + id + '\',\'resolved\',' + !!meta.resolved + ')">' + (meta.resolved ? '✓' : '—') + ' ✏️</span></div>' +
+        '<div class="field"><label>已消化</label><span style="cursor:pointer;" onclick="toggleDetailFlag(\'' + id + '\',\'digested\',' + !!meta.digested + ')">' + (meta.digested ? '✓' : '—') + ' ✏️</span></div>' +
+        '<div class="field"><label>钉选</label><span style="cursor:pointer;" onclick="toggleDetailFlag(\'' + id + '\',\'pinned\',' + !!meta.pinned + ')">' + (meta.pinned ? '✓' : '—') + ' ✏️</span></div>' +
+        '<div class="field"><label>⚓ 坐标系</label><span style="cursor:pointer;" onclick="toggleDetailFlag(\'' + id + '\',\'anchor\',' + !!meta.anchor + ')">' + (meta.anchor ? '✓' : '—') + ' ✏️</span></div>' +
+        '<div class="field"><label>事件类型</label><span style="cursor:pointer;" onclick="editDetailField(\'' + id + '\',\'event_type\',\'' + esc(meta.event_type || '') + '\',\'text\')">' + (meta.event_type || '—') + ' ✏️</span></div>' +
+        '<div class="field"><label>来源</label><span style="cursor:pointer;" onclick="editDetailField(\'' + id + '\',\'source\',\'' + esc(meta.source || '') + '\',\'text\')">' + (meta.source || '—') + ' ✏️</span></div>' +
         '<div class="field" style="grid-column:1/-1;"><label>💭 meaning</label>' + (meta.meaning && meta.meaning.length ? meta.meaning.map(function(m, i) { return '<div style="margin:4px 0;padding:6px 8px;background:var(--bg);border-radius:6px;font-size:13px;line-height:1.5;">' + esc(m) + ' <span style="cursor:pointer;color:var(--accent);font-size:11px;" onclick="editMeaning(\'' + id + '\',' + i + ')">✏️编辑</span> <span style="cursor:pointer;color:var(--negative);font-size:11px;" onclick="deleteMeaning(\'' + id + '\',' + i + ')">🗑删除</span></div>'; }).join('') : '') + '<div style="margin-top:4px;"><span style="cursor:pointer;color:var(--accent);font-size:12px;" onclick="addMeaning(\'' + id + '\')">➕ 添加情感锚定</span></div></div>' +
         (meta.media && meta.media.length ? '<div class="field" style="grid-column:1/-1;"><label>🖼 media</label><div style="display:flex;flex-wrap:wrap;gap:12px;">' + meta.media.map(function(m, i) {
           var path = m.path || m;
