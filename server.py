@@ -2240,6 +2240,8 @@ async def api_bucket_update(request):
             updates["importance"] = 10
     if "digested" in body:
         updates["digested"] = bool(body["digested"])
+    if "anchor" in body:
+        updates["anchor"] = bool(body["anchor"])
     if "media" in body:
         updates["media"] = body["media"] if isinstance(body["media"], list) else []
     if "meaning" in body:
