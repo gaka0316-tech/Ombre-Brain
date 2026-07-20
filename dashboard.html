@@ -1631,7 +1631,19 @@ function filterTimeline() {
     if (monthVal && b.created.substring(5, 7) !== monthVal) return false;
     if (dayVal && b.created.substring(8, 10) !== dayVal) return false;
     if (searchVal) {
-      var haystack = ((b.name || '') + ' ' + (b.content_preview || '') + ' ' + (b.tags || []).join(' ')).toLowerCase();
+      var haystack = (
+        (b.name || '') + ' ' +
+        (b.content_preview || '') + ' ' +
+        (b.tags || []).join(' ') + ' ' +
+        (b.id || '') + ' ' +
+        (b.domain || '') + ' ' +
+        (b.created || '') + ' ' +
+        (b.last_active || '') + ' ' +
+        (b.event_type || '') + ' ' +
+        (b.source || '') + ' ' +
+        ((b.meaning || []).join(' ')) + ' ' +
+        ((b.media || []).map(function(m) { return (m.title || '') + ' ' + (m.description || ''); }).join(' '))
+      ).toLowerCase();
       if (haystack.indexOf(searchVal) === -1) return false;
     }
     return true;
@@ -1892,6 +1904,73 @@ function renderGallery() {
   el.innerHTML = html;
 }
 
+async function addMeaning(bucketId) {
+  var text = prompt('添加情感锚定：');
+  if (!text) return;
+  try {
+    var res = await authFetch(BASE + '/api/bucket/' + bucketId);
+    if (!res.ok) { alert('获取记忆失败'); return; }
+    var b = await res.json();
+    var meaning = (b.metadata || {}).meaning || [];
+    meaning.push(text);
+    var updateRes = await authFetch(BASE + '/api/bucket/' + bucketId, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ meaning: meaning })
+    });
+    if (updateRes.ok) {
+      showDetail(bucketId);
+    } else {
+      alert('添加失败');
+    }
+  } catch(e) { alert('添加出错: ' + e.message); }
+}
+
+async function editMeaning(bucketId, index, currentText) {
+  var newText = prompt('编辑情感锚定：', currentText);
+  if (newText === null) return;
+  try {
+    var res = await authFetch(BASE + '/api/bucket/' + bucketId);
+    if (!res.ok) { alert('获取记忆失败'); return; }
+    var b = await res.json();
+    var meaning = (b.metadata || {}).meaning || [];
+    if (index >= meaning.length) { alert('索引无效'); return; }
+    meaning[index] = newText;
+    var updateRes = await authFetch(BASE + '/api/bucket/' + bucketId, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ meaning: meaning })
+    });
+    if (updateRes.ok) {
+      showDetail(bucketId);
+    } else {
+      alert('保存失败');
+    }
+  } catch(e) { alert('编辑出错: ' + e.message); }
+}
+
+async function deleteMeaning(bucketId, index) {
+  if (!confirm('确定删除这条情感锚定？')) return;
+  try {
+    var res = await authFetch(BASE + '/api/bucket/' + bucketId);
+    if (!res.ok) { alert('获取记忆失败'); return; }
+    var b = await res.json();
+    var meaning = (b.metadata || {}).meaning || [];
+    if (index >= meaning.length) { alert('索引无效'); return; }
+    meaning.splice(index, 1);
+    var updateRes = await authFetch(BASE + '/api/bucket/' + bucketId, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ meaning: meaning })
+    });
+    if (updateRes.ok) {
+      showDetail(bucketId);
+    } else {
+      alert('删除失败');
+    }
+  } catch(e) { alert('删除出错: ' + e.message); }
+}
+
 async function deleteMedia(bucketId, mediaIndex) {
   if (!confirm('确定删除这张图片？')) return;
   try {
@@ -1992,7 +2071,7 @@ async function showDetail(id) {
         '<div class="field"><label>⚓ 坐标系</label>' + (meta.anchor ? '✓' : '—') + '</div>' +
         '<div class="field"><label>事件类型</label>' + (meta.event_type || '—') + '</div>' +
         '<div class="field"><label>来源</label>' + (meta.source || '—') + '</div>' +
-        (meta.meaning && meta.meaning.length ? '<div class="field"><label>💭 meaning</label>' + meta.meaning.map(function(m) { return esc(m); }).join('<br>') + '</div>' : '') +
+        '<div class="field" style="grid-column:1/-1;"><label>💭 meaning</label>' + (meta.meaning && meta.meaning.length ? meta.meaning.map(function(m, i) { return '<div style="margin:4px 0;padding:6px 8px;background:var(--bg);border-radius:6px;font-size:13px;line-height:1.5;">' + esc(m) + ' <span style="cursor:pointer;color:var(--accent);font-size:11px;" onclick="editMeaning(\'' + id + '\',' + i + ',\'' + esc(m).replace(/'/g, "\\'") + '\')">✏️编辑</span> <span style="cursor:pointer;color:var(--negative);font-size:11px;" onclick="deleteMeaning(\'' + id + '\',' + i + ')">🗑删除</span></div>'; }).join('') : '') + '<div style="margin-top:4px;"><span style="cursor:pointer;color:var(--accent);font-size:12px;" onclick="addMeaning(\'' + id + '\')">➕ 添加情感锚定</span></div></div>' +
         (meta.media && meta.media.length ? '<div class="field" style="grid-column:1/-1;"><label>🖼 media</label><div style="display:flex;flex-wrap:wrap;gap:12px;">' + meta.media.map(function(m, i) {
           var path = m.path || m;
           var title = m.title || ('图片 ' + (i+1));
@@ -2366,7 +2445,7 @@ document.getElementById('breath-query').addEventListener('keydown', function(e) 
 
 async function loadConfig() {
   try {
-    var res = await fetch(BASE + '/api/config');
+    var res = await authFetch(BASE + '/api/config');
     var cfg = await res.json();
     document.getElementById('cfg-dehy-model').value = cfg.dehydration.model || '';
     document.getElementById('cfg-dehy-url').value = cfg.dehydration.base_url || '';
@@ -2405,7 +2484,7 @@ async function saveConfig(persist) {
 
   var status = document.getElementById('config-status');
   try {
-    var res = await fetch(BASE + '/api/config', {
+    var res = await authFetch(BASE + '/api/config', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(body),
