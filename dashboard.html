@@ -1,2705 +1,942 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ombre Brain</title>
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --bg: #FDFCF0;
-    --bg-gradient: radial-gradient(ellipse at 30% 20%, #FDFCF0 0%, #EDE4D3 60%, #E2D1B3 100%);
-    --surface: rgba(255, 255, 255, 0.45);
-    --surface-solid: #F7F2E8;
-    --border: rgba(180, 165, 140, 0.3);
-    --border-strong: rgba(160, 140, 110, 0.5);
-    --text: #3A3530;
-    --text-dim: #8A8070;
-    --text-light: #B0A590;
-    --accent: #2F4F4F;
-    --accent-light: #3D6363;
-    --accent-glow: rgba(47, 79, 79, 0.12);
-    --positive: #4A7C59;
-    --negative: #8B4A4A;
-    --warning: #9A7B4F;
-    --shadow-light: rgba(255, 252, 240, 0.7);
-    --shadow-dark: rgba(163, 148, 120, 0.4);
-    --shadow-dark-subtle: rgba(163, 148, 120, 0.2);
-  }
-
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-
-  body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    font-weight: 400;
-    background: var(--bg-gradient);
-    background-attachment: fixed;
-    color: var(--text);
-    min-height: 100vh;
-    line-height: 1.6;
-    -webkit-font-smoothing: antialiased;
-  }
-
-  .header {
-    padding: 28px 40px 20px;
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    backdrop-filter: blur(12px);
-    background: rgba(253, 252, 240, 0.7);
-    border-bottom: 1px solid var(--border);
-    position: sticky;
-    top: 0;
-    z-index: 50;
-  }
-  .header h1 {
-    font-family: 'Cormorant Garamond', serif;
-    font-size: 26px;
-    font-weight: 600;
-    color: var(--accent);
-    letter-spacing: 0.5px;
-  }
-  .header .stats {
-    font-size: 12px;
-    color: var(--text-dim);
-    font-weight: 300;
-    letter-spacing: 0.3px;
-  }
-  .search-bar {
-    margin-left: auto;
-    display: flex;
-    gap: 8px;
-  }
-  .search-bar input {
-    background: var(--surface);
-    backdrop-filter: blur(8px);
-    border: 1px solid var(--border);
-    color: var(--text);
-    padding: 10px 18px;
-    border-radius: 20px;
-    font-family: inherit;
-    font-size: 13px;
-    width: 260px;
-    transition: all 0.3s ease;
-    box-shadow: inset 2px 2px 4px var(--shadow-dark-subtle), inset -2px -2px 4px var(--shadow-light);
-  }
-  .search-bar input:focus {
-    outline: none;
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-glow), inset 2px 2px 4px var(--shadow-dark-subtle), inset -2px -2px 4px var(--shadow-light);
-  }
-  .search-bar input::placeholder { color: var(--text-light); }
-
-  .tabs {
-    display: flex;
-    padding: 0 40px;
-    gap: 4px;
-    background: rgba(253, 252, 240, 0.5);
-    backdrop-filter: blur(8px);
-    border-bottom: 1px solid var(--border);
-  }
-  .tab {
-    padding: 14px 22px;
-    font-size: 13px;
-    font-weight: 400;
-    color: var(--text-dim);
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
-    transition: all 0.25s ease;
-    letter-spacing: 0.3px;
-  }
-  .tab:hover { color: var(--text); }
-  .tab.active {
-    color: var(--accent);
-    border-bottom-color: var(--accent);
-    font-weight: 500;
-  }
-
-  .content { padding: 32px 40px; }
-
-  .filters {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 24px;
-    flex-wrap: wrap;
-  }
-  .filter-btn {
-    padding: 8px 18px;
-    font-size: 12px;
-    font-weight: 400;
-    border: none;
-    border-radius: 24px;
-    background: linear-gradient(145deg, #FAF6ED, #EDE4D3);
-    color: var(--text-dim);
-    cursor: pointer;
-    font-family: inherit;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 4px 4px 8px var(--shadow-dark-subtle), -4px -4px 8px var(--shadow-light);
-  }
-  .filter-btn:hover {
-    color: var(--accent);
-    box-shadow: 5px 5px 10px var(--shadow-dark), -5px -5px 10px var(--shadow-light);
-    transform: translateY(-1px);
-  }
-  .filter-btn:active {
-    transform: translateY(0);
-    box-shadow: inset 2px 2px 5px var(--shadow-dark-subtle), inset -2px -2px 5px var(--shadow-light);
-  }
-  .filter-btn.active {
-    color: #F0EDE4;
-    background: linear-gradient(145deg, var(--accent-light), var(--accent));
-    box-shadow: inset 3px 3px 6px rgba(0,0,0,0.2), inset -2px -2px 4px rgba(255,255,255,0.05);
-  }
-
-  .bucket-list { display: flex; flex-direction: column; gap: 8px; }
-  .load-more-btn { text-align: center; padding: 14px; margin-top: 8px; background: linear-gradient(135deg, #e8dfd0, #d4c9b8); border-radius: 10px; cursor: pointer; color: #6b5e4f; font-size: 14px; font-weight: 500; transition: all 0.2s; }
-  .load-more-btn:hover { background: linear-gradient(135deg, #d4c9b8, #c5b9a8); transform: translateY(-1px); }
-  .load-more-done { text-align: center; padding: 10px; margin-top: 8px; color: #a09080; font-size: 13px; }
-  .bucket-row {
-    display: grid;
-    grid-template-columns: 32px 200px 100px 80px 60px 100px 1fr;
-    gap: 12px;
-    padding: 14px 20px;
-    border-radius: 16px;
-    font-size: 13px;
-    align-items: center;
-    cursor: pointer;
-    transition: all 0.25s ease;
-    background: var(--surface);
-    border: 1px solid transparent;
-    box-shadow: 4px 4px 10px var(--shadow-dark-subtle), -4px -4px 10px var(--shadow-light);
-  }
-  .bucket-row:hover {
-    border-color: var(--border);
-    box-shadow: 6px 6px 14px var(--shadow-dark), -6px -6px 14px var(--shadow-light);
-    transform: translateY(-1px);
-  }
-  .bucket-row .icon { font-size: 16px; text-align: center; }
-  .bucket-row .name {
-    font-weight: 500;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    color: var(--text);
-  }
-  .bucket-row .domain {
-    color: var(--text-dim);
-    font-size: 11px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .bucket-row .emotion { font-size: 11px; }
-  .bucket-row .score {
-    font-size: 12px;
-    text-align: right;
-    font-weight: 500;
-    color: var(--accent);
-  }
-  .bucket-row .time {
-    font-size: 11px;
-    color: var(--text-light);
-    text-align: right;
-  }
-  .bucket-row .preview {
-    font-size: 12px;
-    color: var(--text-dim);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .v-bar {
-    width: 44px;
-    height: 6px;
-    border-radius: 3px;
-    background: linear-gradient(to right, var(--negative), var(--warning), var(--positive));
-    position: relative;
-    display: inline-block;
-  }
-  .v-dot {
-    position: absolute;
-    top: -3px;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: var(--surface-solid);
-    border: 2px solid var(--accent);
-    transform: translateX(-50%);
-    box-shadow: 0 1px 3px var(--shadow-dark-subtle);
-  }
-
-  .detail-panel {
-    position: fixed;
-    right: 0;
-    top: 0;
-    width: 440px;
-    height: 100vh;
-    background: var(--surface-solid);
-    border-left: 1px solid var(--border);
-    padding: 32px 28px;
-    overflow-y: auto;
-    transform: translateX(100%);
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    z-index: 100;
-    box-shadow: -8px 0 24px var(--shadow-dark-subtle);
-  }
-  .detail-panel.open { transform: translateX(0); }
-  .detail-panel .close-btn {
-    position: absolute;
-    top: 16px;
-    right: 16px;
-    background: none;
-    border: none;
-    color: var(--text-dim);
-    font-size: 20px;
-    cursor: pointer;
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
-  }
-  .detail-panel .close-btn:hover {
-    background: var(--accent-glow);
-    color: var(--accent);
-  }
-  .detail-panel h2 {
-    font-family: 'Cormorant Garamond', serif;
-    font-size: 20px;
-    font-weight: 600;
-    margin-bottom: 20px;
-    color: var(--accent);
-    padding-right: 40px;
-  }
-  .detail-meta {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    margin-bottom: 24px;
-  }
-  .detail-meta .field { font-size: 12px; }
-  .detail-meta .field label {
-    color: var(--text-light);
-    display: block;
-    margin-bottom: 3px;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-  .detail-content {
-    font-size: 13px;
-    line-height: 1.8;
-    white-space: pre-wrap;
-    background: var(--surface);
-    padding: 20px;
-    border-radius: 16px;
-    border: 1px solid var(--border);
-    max-height: 50vh;
-    overflow-y: auto;
-    box-shadow: inset 3px 3px 6px var(--shadow-dark-subtle), inset -3px -3px 6px var(--shadow-light);
-  }
-
-  .detail-actions {
-    display: flex; gap: 8px; margin: 16px 0 8px; padding-top: 12px; border-top: 1px solid var(--border);
-  }
-  .detail-actions button {
-    flex: 1; padding: 10px; border-radius: 8px; border: 1px solid var(--border);
-    background: var(--surface); color: var(--text); font-size: 13px; cursor: pointer;
-  }
-  .detail-actions button:hover { background: var(--accent-glow); }
-  .detail-actions .btn-delete { color: var(--negative); border-color: var(--negative); }
-  .detail-actions .btn-delete:hover { background: rgba(139,74,74,0.1); }
-
-  .edit-modal {
-    display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0,0,0,0.4); z-index: 1100; align-items: center; justify-content: center;
-  }
-  .edit-modal.open { display: flex; }
-  .edit-modal-body {
-    background: var(--bg); border-radius: 16px; padding: 24px;
-    width: 90%; max-width: 520px; max-height: 85vh; overflow-y: auto;
-    box-shadow: 0 12px 40px rgba(0,0,0,0.15);
-  }
-  .edit-modal-body h3 { font-family: 'Cormorant Garamond', serif; font-size: 20px; margin-bottom: 16px; }
-  .edit-field { margin-bottom: 12px; }
-  .edit-field label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 4px; }
-  .edit-field input, .edit-field textarea {
-    width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
-    background: var(--surface); color: var(--text); font-size: 13px; font-family: inherit;
-  }
-  .edit-field textarea { min-height: 120px; resize: vertical; line-height: 1.6; }
-  .edit-row { display: flex; gap: 10px; }
-  .edit-row .edit-field { flex: 1; }
-  .edit-btns { display: flex; gap: 8px; margin-top: 16px; }
-  .edit-btns button { flex: 1; padding: 10px; border-radius: 8px; border: none; font-size: 13px; cursor: pointer; }
-  .edit-btns .btn-save { background: var(--accent); color: #fff; }
-  .edit-btns .btn-cancel { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
-
-  .timeline-month { margin-bottom: 24px; }
-  .timeline-month h3 { font-family: 'Cormorant Garamond', serif; font-size: 18px; margin: 0 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); color: var(--accent); }
-  .timeline-item { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(0,0,0,0.04); cursor: pointer; }
-  .timeline-item:hover { background: var(--accent-glow); border-radius: 8px; }
-  .timeline-date { min-width: 50px; font-size: 12px; color: var(--text-dim); padding-top: 2px; }
-  .timeline-icon { font-size: 14px; }
-  .timeline-body { flex: 1; }
-  .timeline-name { font-size: 13px; font-weight: 600; }
-  .timeline-preview { font-size: 12px; color: var(--text-dim); margin-top: 2px; line-height: 1.4; }
-
-  .batch-bar { display: none; gap: 8px; align-items: center; padding: 10px 14px; margin-bottom: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
-  .batch-bar.active { display: flex; }
-  .batch-bar span { font-size: 12px; color: var(--text-dim); }
-  .batch-bar button { padding: 6px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: 12px; cursor: pointer; }
-  .batch-bar .btn-batch-delete { color: var(--negative); border-color: var(--negative); }
-  .batch-check { width: 16px; height: 16px; margin-right: 4px; cursor: pointer; accent-color: var(--accent); }
-
-  .config-section {
-    margin-bottom: 28px;
-    padding: 24px;
-    background: var(--surface);
-    border-radius: 20px;
-    border: 1px solid var(--border);
-    box-shadow: 6px 6px 14px var(--shadow-dark-subtle), -6px -6px 14px var(--shadow-light);
-  }
-  .config-section h3 {
-    font-family: 'Cormorant Garamond', serif;
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--accent);
-    margin-bottom: 16px;
-    letter-spacing: 0.3px;
-  }
-  .config-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 12px;
-  }
-  .config-row label {
-    width: 110px;
-    font-size: 12px;
-    color: var(--text-dim);
-    flex-shrink: 0;
-    font-weight: 500;
-    letter-spacing: 0.2px;
-  }
-  .config-row input, .config-row select {
-    flex: 1;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    color: var(--text);
-    padding: 10px 14px;
-    border-radius: 12px;
-    font-family: inherit;
-    font-size: 13px;
-    transition: all 0.25s ease;
-    box-shadow: inset 2px 2px 4px var(--shadow-dark-subtle), inset -2px -2px 4px var(--shadow-light);
-  }
-  .config-row input:focus, .config-row select:focus {
-    outline: none;
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-glow), inset 2px 2px 4px var(--shadow-dark-subtle);
-  }
-
-  .btn-primary {
-    padding: 12px 28px;
-    background: linear-gradient(145deg, var(--accent-light), var(--accent));
-    color: #F0EDE4;
-    border: none;
-    border-radius: 24px;
-    font-family: inherit;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 6px 6px 12px rgba(40, 65, 65, 0.25), -4px -4px 10px var(--shadow-light), inset 0 1px 0 rgba(255,255,255,0.1);
-    letter-spacing: 0.4px;
-    position: relative;
-    overflow: hidden;
-  }
-  .btn-primary::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: 24px;
-    background: linear-gradient(145deg, rgba(255,255,255,0.08), transparent);
-    pointer-events: none;
-  }
-  .btn-primary:hover {
-    box-shadow: 8px 8px 16px rgba(40, 65, 65, 0.3), -5px -5px 12px var(--shadow-light), inset 0 1px 0 rgba(255,255,255,0.15);
-    transform: translateY(-2px);
-  }
-  .btn-primary:active {
-    transform: translateY(0);
-    box-shadow: inset 3px 3px 6px rgba(0,0,0,0.2), inset -2px -2px 4px rgba(255,255,255,0.05);
-  }
-  .btn-secondary {
-    padding: 12px 28px;
-    background: linear-gradient(145deg, #FAF6ED, #EDE4D3);
-    color: var(--accent);
-    border: none;
-    border-radius: 24px;
-    font-family: inherit;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 5px 5px 10px var(--shadow-dark-subtle), -5px -5px 10px var(--shadow-light);
-  }
-  .btn-secondary:hover {
-    box-shadow: 7px 7px 14px var(--shadow-dark), -6px -6px 12px var(--shadow-light);
-    transform: translateY(-2px);
-  }
-  .btn-secondary:active {
-    transform: translateY(0);
-    box-shadow: inset 3px 3px 6px var(--shadow-dark-subtle), inset -2px -2px 4px var(--shadow-light);
-  }
-
-  #network-3d {
-    width: 100%;
-    height: calc(100vh - 180px);
-    border-radius: 20px;
-    border: 1px solid var(--border);
-    overflow: hidden;
-    position: relative;
-  }
-  .network-legend {
-    display: flex;
-    gap: 20px;
-    margin-bottom: 16px;
-    font-size: 12px;
-    color: var(--text-dim);
-  }
-  .legend-item { display: flex; align-items: center; gap: 6px; }
-  .legend-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    display: inline-block;
-    box-shadow: 0 1px 3px var(--shadow-dark-subtle);
-  }
-
-  .loading {
-    text-align: center;
-    color: var(--text-dim);
-    padding: 60px;
-    font-size: 14px;
-    font-weight: 300;
-  }
-
-  .breath-controls {
-    display: flex;
-    gap: 12px;
-    margin-bottom: 24px;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-  .breath-controls input {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    color: var(--text);
-    padding: 10px 14px;
-    border-radius: 12px;
-    font-family: inherit;
-    font-size: 13px;
-    box-shadow: inset 2px 2px 4px var(--shadow-dark-subtle), inset -2px -2px 4px var(--shadow-light);
-  }
-  .breath-controls input:focus {
-    outline: none;
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-glow), inset 2px 2px 4px var(--shadow-dark-subtle);
-  }
-  .breath-controls button {
-    background: linear-gradient(145deg, var(--accent-light), var(--accent));
-    color: #F0EDE4;
-    border: none;
-    padding: 12px 26px;
-    border-radius: 24px;
-    font-family: inherit;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 6px 6px 12px rgba(40, 65, 65, 0.25), -4px -4px 10px var(--shadow-light), inset 0 1px 0 rgba(255,255,255,0.1);
-    position: relative;
-    overflow: hidden;
-  }
-  .breath-controls button::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: 24px;
-    background: linear-gradient(145deg, rgba(255,255,255,0.08), transparent);
-    pointer-events: none;
-  }
-  .breath-controls button:hover {
-    box-shadow: 8px 8px 16px rgba(40, 65, 65, 0.3), -5px -5px 12px var(--shadow-light);
-    transform: translateY(-2px);
-  }
-  .breath-controls button:active {
-    transform: translateY(0);
-    box-shadow: inset 3px 3px 6px rgba(0,0,0,0.2), inset -2px -2px 4px rgba(255,255,255,0.05);
-  }
-  .breath-controls label {
-    font-size: 12px;
-    color: var(--text-dim);
-    font-weight: 500;
-  }
-  .breath-info {
-    font-size: 12px;
-    color: var(--text-dim);
-    margin-bottom: 20px;
-    line-height: 1.8;
-    padding: 16px 20px;
-    background: var(--surface);
-    border-radius: 16px;
-    border: 1px solid var(--border);
-  }
-  .breath-info code {
-    background: var(--accent-glow);
-    padding: 2px 8px;
-    border-radius: 6px;
-    color: var(--accent);
-    font-family: 'SF Mono', 'Fira Code', monospace;
-    font-size: 11px;
-  }
-  .score-row {
-    display: grid;
-    grid-template-columns: 32px 180px 1fr 60px;
-    gap: 12px;
-    padding: 12px 16px;
-    border-radius: 12px;
-    font-size: 13px;
-    align-items: center;
-    transition: all 0.2s ease;
-    margin-bottom: 4px;
-  }
-  .score-row:hover {
-    background: var(--surface);
-    box-shadow: 3px 3px 8px var(--shadow-dark-subtle), -3px -3px 8px var(--shadow-light);
-  }
-  .score-row .rank { color: var(--text-light); font-size: 12px; text-align: center; font-weight: 500; }
-  .score-row .name {
-    font-weight: 500;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .score-bars { display: flex; gap: 4px; align-items: center; }
-  .score-bar-group { display: flex; flex-direction: column; gap: 1px; flex: 1; }
-  .score-bar-track {
-    height: 5px;
-    background: var(--border);
-    border-radius: 3px;
-    overflow: hidden;
-  }
-  .score-bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s ease; }
-  .score-bar-label {
-    font-size: 9px;
-    color: var(--text-light);
-    display: flex;
-    justify-content: space-between;
-  }
-  .score-final { font-size: 14px; font-weight: 600; text-align: right; }
-  .score-pass { color: var(--positive); }
-  .score-fail { color: var(--text-light); }
-
-  .breath-flow {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 24px;
-    padding: 16px 20px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    font-size: 12px;
-    overflow-x: auto;
-    box-shadow: 4px 4px 10px var(--shadow-dark-subtle), -4px -4px 10px var(--shadow-light);
-  }
-  .flow-step {
-    padding: 10px 14px;
-    border-radius: 12px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    white-space: nowrap;
-    text-align: center;
-    min-width: 90px;
-    box-shadow: inset 2px 2px 4px var(--shadow-dark-subtle), inset -2px -2px 4px var(--shadow-light);
-  }
-  .flow-step.active { border-color: var(--accent); color: var(--accent); }
-  .flow-arrow { color: var(--text-light); font-size: 16px; }
-
-  @media (max-width: 768px) {
-    .header { padding: 20px; flex-wrap: wrap; }
-    .header h1 { font-size: 22px; }
-    .search-bar { margin-left: 0; width: 100%; }
-    .search-bar input { width: 100%; }
-    .tabs { padding: 0 16px; overflow-x: auto; }
-    .content { padding: 20px 16px; }
-    .bucket-row {
-      grid-template-columns: 28px 1fr 60px;
-      gap: 8px;
-      padding: 12px 16px;
-    }
-    .bucket-row .domain,
-    .bucket-row .emotion,
-    .bucket-row .time,
-    .bucket-row .preview { display: none; }
-    .detail-panel { width: 100%; }
-    .config-row { flex-wrap: wrap; }
-    .config-row label { width: 100%; }
-    .breath-flow { display: none; }
-  }
-</style>
-</head>
-<body>
-
-<div class="header">
-  <h1>◐ Ombre Brain</h1>
-  <span class="stats" id="stats">loading...</span>
-  <div class="search-bar">
-    <input type="text" id="search-input" placeholder="搜索记忆…" />
-  </div>
-  <button onclick="doLogout()" title="退出登录" style="margin-left:12px;background:none;border:1px solid var(--border);color:var(--text-dim);border-radius:20px;padding:6px 14px;font-size:12px;cursor:pointer;">退出</button>
-</div>
-
-<div class="tabs">
-  <div class="tab active" data-tab="list">记忆桶</div>
-  <div class="tab" data-tab="timeline">时间线</div>
-  <div class="tab" data-tab="breath">Breath 模拟</div>
-  <div class="tab" data-tab="network">记忆网络</div>
-  <div class="tab" data-tab="letters">✉️ 信箱</div>
-  <div class="tab" data-tab="plans">📋 计划</div>
-  <div class="tab" data-tab="selfknow">🪞 自我认知</div>
-  <div class="tab" data-tab="anchors">⚓ 坐标系</div>
-  <div class="tab" data-tab="gallery">🖼 图库</div>
-  <div class="tab" data-tab="config">配置</div>
-  <div class="tab" data-tab="import">导入</div>
-  <div class="tab" data-tab="settings">设置</div>
-  <div class="tab" data-tab="export">📤 导出</div>
-</div>
-
-<div class="content" id="list-view">
-  <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-    <div class="filters" id="filters" style="flex:1;margin-bottom:0;"></div>
-    <button onclick="toggleBatchMode()" id="batch-toggle" style="padding:8px 12px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12px;cursor:pointer;white-space:nowrap;">☑ 批量</button>
-    <button onclick="openCreate()" style="padding:8px 16px;border-radius:20px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-size:13px;cursor:pointer;white-space:nowrap;">＋ 新增</button>
-  </div>
-  <div class="batch-bar" id="batch-bar">
-    <span id="batch-count">已选 0 条</span>
-    <button onclick="batchSelectAll()">全选</button>
-    <button onclick="batchAction('resolve')">✓ 标记已解决</button>
-    <button class="btn-batch-delete" onclick="batchAction('delete')">🗑 批量删除</button>
-    <button onclick="toggleBatchMode()">取消</button>
-  </div>
-  <div class="bucket-list" id="bucket-list">
-    <div class="loading">加载中…</div>
-  </div>
-</div>
-
-<div class="content" id="timeline-view" style="display:none">
-  <div style="margin-bottom:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-    <select id="tl-year" onchange="filterTimeline()" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;">
-      <option value="">全部年份</option>
-    </select>
-    <select id="tl-month" onchange="filterTimeline()" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;">
-      <option value="">全部月份</option>
-    </select>
-    <select id="tl-day" onchange="filterTimeline()" style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;">
-      <option value="">全部日期</option>
-    </select>
-    <button onclick="document.getElementById('tl-year').value='';document.getElementById('tl-month').value='';document.getElementById('tl-day').value='';document.getElementById('tl-search').value='';filterTimeline();" style="padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text-dim);font-size:12px;cursor:pointer;">重置</button>
-  </div>
-  <div style="margin-bottom:16px;">
-    <input type="text" id="tl-search" placeholder="在时间线中搜索（含有关键词即显示）…" oninput="filterTimeline()" style="width:100%;padding:8px 14px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;box-sizing:border-box;">
-  </div>
-  <div id="timeline-content">
-    <div class="loading">加载中…</div>
-  </div>
-</div>
-
-<div class="content" id="letters-view" style="display:none">
-  <div style="margin-bottom:16px;color:var(--text-dim);font-size:13px;">永久保存的信件，不压缩不衰减。通过 <code>letter_write</code> 写信，<code>letter_read</code> 读信。</div>
-  <div id="letters-list">
-    <div class="loading">加载中…</div>
-  </div>
-</div>
-
-<div class="content" id="plans-view" style="display:none">
-  <div style="margin-bottom:16px;color:var(--text-dim);font-size:13px;">承诺/约定/待办追踪。通过 <code>plan</code> 创建，<code>trace(bucket_id, resolved=1)</code> 标记完成。</div>
-  <div id="plans-list">
-    <div class="loading">加载中…</div>
-  </div>
-</div>
-
-<div class="content" id="selfknow-view" style="display:none">
-  <div style="margin-bottom:16px;color:var(--text-dim);font-size:13px;">自我认知日志。通过 <code>I(content="...", aspect="...")</code> 写入，<code>I(read=True)</code> 读取。breath 时自动附最近 3 条。</div>
-  <div id="selfknow-list">
-    <div class="loading">加载中…</div>
-  </div>
-</div>
-
-<div class="content" id="anchors-view" style="display:none">
-  <div style="margin-bottom:16px;color:var(--text-dim);font-size:13px;">坐标系桶（anchor）。重要但刻意不在默认 breath 浮现，搜索时仍能找到。与 pinned 互斥。上限 24 个。通过 <code>anchor(bucket_id)</code> 设置，<code>release(bucket_id)</code> 释放。</div>
-  <div id="anchors-list">
-    <div class="loading">加载中…</div>
-  </div>
-</div>
-
-<div class="content" id="gallery-view" style="display:none">
-  <div style="margin-bottom:16px;color:var(--text-dim);font-size:13px;">所有上传的图片集中展示。点击图片查看大图，点击记忆名称跳转到详情。</div>
-  <div id="gallery-list">
-    <div class="loading">加载中…</div>
-  </div>
-</div>
-
-<div class="content" id="breath-view" style="display:none">
-  <div class="breath-flow" id="breath-flow">
-    <div class="flow-step" id="fs-input">① 输入<br><small>query / valence / arousal</small></div>
-    <span class="flow-arrow">→</span>
-    <div class="flow-step" id="fs-candidates">② 候选池<br><small id="fs-cand-n">— 桶</small></div>
-    <span class="flow-arrow">→</span>
-    <div class="flow-step" id="fs-scoring">③ 四维评分<br><small>topic×4 + emotion×2 + time×2.5 + imp×1</small></div>
-    <span class="flow-arrow">→</span>
-    <div class="flow-step" id="fs-threshold">④ 阈值过滤<br><small id="fs-thresh-n">≥50 → — 通过</small></div>
-    <span class="flow-arrow">→</span>
-    <div class="flow-step" id="fs-sort">⑤ 降序排列<br><small>返回 top N</small></div>
-  </div>
-
-  <div class="breath-controls">
-    <label>Query</label>
-    <input type="text" id="breath-query" placeholder="关键词…" style="width:220px" />
-    <label>Valence</label>
-    <input type="number" id="breath-valence" placeholder="0~1" min="0" max="1" step="0.1" style="width:80px" />
-    <label>Arousal</label>
-    <input type="number" id="breath-arousal" placeholder="0~1" min="0" max="1" step="0.1" style="width:80px" />
-    <button onclick="runBreathDebug()">模拟 Breath</button>
-  </div>
-
-  <div class="breath-info" id="breath-info" style="display:none"></div>
-  <div id="breath-results">
-    <div class="loading">输入 query 后点击「模拟 Breath」查看评分链路</div>
-  </div>
-</div>
-
-<div class="content" id="network-view" style="display:none">
-  <div class="network-legend">
-    <div class="legend-item"><span class="legend-dot" style="background:#4fc3f7"></span> dynamic</div>
-    <div class="legend-item"><span class="legend-dot" style="background:#ffd54f"></span> permanent</div>
-    <div class="legend-item"><span class="legend-dot" style="background:#ef9a9a"></span> feel</div>
-    <div class="legend-item"><span class="legend-dot" style="background:#90a4ae"></span> archived</div>
-  </div>
-  <div id="network-3d"></div>
-</div>
-
-<div class="content" id="import-view" style="display:none">
-  <div style="max-width:720px;margin:0 auto;">
-    <h3>历史对话导入</h3>
-    <p style="color:var(--text-dim);font-size:13px;">支持 Claude JSON、ChatGPT 导出、DeepSeek、Markdown、纯文本格式</p>
-
-    <div id="import-upload-zone" style="border:2px dashed var(--border);border-radius:16px;padding:40px;text-align:center;cursor:pointer;margin:20px 0;transition:border-color .2s;">
-      <div style="font-size:32px;margin-bottom:8px;">📁</div>
-      <div>拖拽文件到此处，或 <span style="color:var(--accent);text-decoration:underline;">点击选择</span></div>
-      <input type="file" id="import-file-input" accept=".json,.txt,.md,.jsonl" style="display:none" />
-    </div>
-
-    <div style="margin:12px 0;">
-      <label><input type="checkbox" id="import-preserve-raw" /> 保留原文模式（特殊情境/暗号/仪式性内容不摘要）</label>
-    </div>
-
-    <div id="import-progress" style="display:none;margin:20px 0;">
-      <div style="display:flex;justify-content:space-between;margin-bottom:8px;">
-        <span id="import-status-text">准备中…</span>
-        <span id="import-progress-text">0/0</span>
-      </div>
-      <div style="background:var(--surface);border-radius:8px;height:12px;overflow:hidden;">
-        <div id="import-progress-bar" style="height:100%;background:var(--accent);border-radius:8px;transition:width .3s;width:0%;"></div>
-      </div>
-      <div style="display:flex;gap:16px;margin-top:8px;font-size:13px;color:var(--text-dim);">
-        <span>API调用: <b id="import-api-calls">0</b></span>
-        <span>新建: <b id="import-created">0</b></span>
-        <span>合并: <b id="import-merged">0</b></span>
-        <span>原文: <b id="import-raw">0</b></span>
-      </div>
-      <div style="margin-top:12px;">
-        <button id="import-pause-btn" onclick="pauseImport()" style="display:none;">⏸ 暂停</button>
-      </div>
-    </div>
-
-    <div id="import-errors" style="display:none;margin:12px 0;padding:12px;background:var(--surface);border-radius:8px;font-size:12px;color:var(--negative);max-height:120px;overflow-y:auto;"></div>
-
-    <div id="import-results-section" style="margin:20px 0;">
-      <h3>已导入记忆 <button onclick="loadImportResults()" style="font-size:12px;padding:2px 10px;">刷新</button></h3>
-      <div id="import-results-list" style="max-height:500px;overflow-y:auto;"></div>
-    </div>
-
-    <hr style="border-color:var(--border);margin:24px 0;" />
-
-    <h3>高频模式检测</h3>
-    <button onclick="detectPatterns()">🔍 检测高频模式</button>
-    <div id="import-patterns" style="margin-top:16px;"></div>
-  </div>
-</div>
-
-<div class="content" id="config-view" style="display:none">
-  <div style="max-width:640px;margin:0 auto;">
-    <div class="config-section">
-      <h3>脱水 / 打标 API</h3>
-      <div class="config-row">
-        <label>Model</label>
-        <input type="text" id="cfg-dehy-model" placeholder="gemini-2.5-flash-lite" />
-      </div>
-      <div class="config-row">
-        <label>Base URL</label>
-        <input type="text" id="cfg-dehy-url" placeholder="https://..." />
-      </div>
-      <div class="config-row">
-        <label>API Key</label>
-        <input type="password" id="cfg-dehy-key" placeholder="当前: 加载中…" />
-      </div>
-      <div style="margin-top:-4px;margin-bottom:12px;padding-left:122px;font-size:11px;color:var(--text-light);">留空不改。不会持久化到 yaml（请用环境变量）</div>
-      <div class="config-row">
-        <label>Max Tokens</label>
-        <input type="number" id="cfg-dehy-maxtokens" min="128" max="8192" />
-      </div>
-      <div class="config-row">
-        <label>Temperature</label>
-        <input type="number" id="cfg-dehy-temp" min="0" max="2" step="0.05" />
-      </div>
-    </div>
-
-    <div class="config-section">
-      <h3>向量化 Embedding</h3>
-      <div class="config-row">
-        <label>启用</label>
-        <select id="cfg-emb-enabled"><option value="true">开启</option><option value="false">关闭</option></select>
-      </div>
-      <div class="config-row">
-        <label>Model</label>
-        <input type="text" id="cfg-emb-model" placeholder="gemini-embedding-001" />
-      </div>
-    </div>
-
-    <div class="config-section">
-      <h3>其他参数</h3>
-      <div class="config-row">
-        <label>合并阈值</label>
-        <input type="number" id="cfg-merge" min="0" max="100" />
-      </div>
-      <div style="margin-top:-4px;padding-left:122px;font-size:11px;color:var(--text-light);">0-100，越高越难合并相似桶</div>
-    </div>
-
-    <div style="display:flex;gap:12px;margin-top:8px;">
-      <button class="btn-primary" onclick="saveConfig(false)">应用（仅运行时）</button>
-      <button class="btn-secondary" onclick="saveConfig(true)">应用并写入 config.yaml</button>
-    </div>
-    <div id="config-status" style="margin-top:16px;font-size:13px;"></div>
-
-    <div class="config-section" style="margin-top:28px;">
-      <h3>系统信息</h3>
-      <div id="config-readonly" style="font-size:13px;color:var(--text-dim);line-height:1.8;">加载中…</div>
-    </div>
-  </div>
-</div>
-
-<div class="detail-panel" id="detail-panel">
-  <button class="close-btn" onclick="closeDetail()">✕</button>
-  <div id="detail-content"></div>
-</div>
-
-<!-- Edit Modal -->
-<div class="edit-modal" id="edit-modal">
-  <div class="edit-modal-body">
-    <h3>✏️ 编辑记忆</h3>
-    <input type="hidden" id="edit-id">
-    <div class="edit-field">
-      <label>名称</label>
-      <input type="text" id="edit-name">
-    </div>
-    <div class="edit-field">
-      <label>内容</label>
-      <textarea id="edit-content"></textarea>
-    </div>
-    <div class="edit-field">
-      <label>标签（逗号分隔）</label>
-      <input type="text" id="edit-tags">
-    </div>
-    <div class="edit-field">
-      <label>域（逗号分隔）</label>
-      <input type="text" id="edit-domain" placeholder="如：恋爱, 内心, 数字">
-    </div>
-    <div class="edit-field">
-      <label>事件类型</label>
-      <select id="edit-event-type">
-        <option value="">—</option>
-        <option value="状态变化">状态变化</option>
-        <option value="互动">互动</option>
-        <option value="计划">计划</option>
-        <option value="观点">观点</option>
-        <option value="成就">成就</option>
-        <option value="关系">关系</option>
-        <option value="情感">情感</option>
-        <option value="技术">技术</option>
-        <option value="里程碑">里程碑</option>
-        <option value="日常">日常</option>
-        <option value="其他">其他</option>
-      </select>
-    </div>
-    <div class="edit-field">
-      <label>来源（框名/日期）</label>
-      <input type="text" id="edit-source" placeholder="如：路标框 2026.5.14">
-    </div>
-    <div class="edit-row">
-      <div class="edit-field">
-        <label>重要度 (1-10)</label>
-        <input type="number" id="edit-importance" min="1" max="10">
-      </div>
-      <div class="edit-field">
-        <label>效价 V (0-1)</label>
-        <input type="number" id="edit-valence" min="0" max="1" step="0.05">
-      </div>
-      <div class="edit-field">
-        <label>唤醒度 A (0-1)</label>
-        <input type="number" id="edit-arousal" min="0" max="1" step="0.05">
-      </div>
-    </div>
-    <div class="edit-btns">
-      <button class="btn-cancel" onclick="closeEdit()">取消</button>
-      <button class="btn-save" onclick="saveBucket()">保存</button>
-    </div>
-  </div>
-</div>
-
-<!-- Create Modal -->
-<div class="edit-modal" id="create-modal">
-  <div class="edit-modal-body">
-    <h3>＋ 新增记忆</h3>
-    <div style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">域、标签、效价、唤醒度支持自动分析，留空即可</div>
-    <div class="edit-field">
-      <label>名称</label>
-      <input type="text" id="create-name" placeholder="记忆名称">
-    </div>
-    <div class="edit-field">
-      <label>内容</label>
-      <textarea id="create-content" placeholder="记忆内容…"></textarea>
-    </div>
-    <div class="edit-field">
-      <label>标签（逗号分隔）</label>
-      <input type="text" id="create-tags" placeholder="标签1, 标签2">
-    </div>
-    <div class="edit-field">
-      <label>域（逗号分隔，留空=自动）</label>
-      <input type="text" id="create-domain" placeholder="如：恋爱, 内心, 数字">
-    </div>
-    <div class="edit-field">
-      <label>事件类型（留空=自动）</label>
-      <select id="create-event-type">
-        <option value="">自动分析</option>
-        <option value="状态变化">状态变化</option>
-        <option value="互动">互动</option>
-        <option value="计划">计划</option>
-        <option value="观点">观点</option>
-        <option value="成就">成就</option>
-        <option value="关系">关系</option>
-        <option value="情感">情感</option>
-        <option value="技术">技术</option>
-        <option value="里程碑">里程碑</option>
-        <option value="日常">日常</option>
-        <option value="其他">其他</option>
-      </select>
-    </div>
-    <div class="edit-field">
-      <label>来源（框名/日期）</label>
-      <input type="text" id="create-source" placeholder="如：路标框 2026.5.14">
-    </div>
-    <div class="edit-row">
-      <div class="edit-field">
-        <label>重要度 (1-10)</label>
-        <input type="number" id="create-importance" min="1" max="10" value="5">
-      </div>
-      <div class="edit-field">
-        <label>效价 V (留空=自动)</label>
-        <input type="number" id="create-valence" min="0" max="1" step="0.05" placeholder="自动">
-      </div>
-      <div class="edit-field">
-        <label>唤醒度 A (留空=自动)</label>
-        <input type="number" id="create-arousal" min="0" max="1" step="0.05" placeholder="自动">
-      </div>
-    </div>
-    <div class="edit-btns">
-      <button class="btn-cancel" onclick="closeCreate()">取消</button>
-      <button class="btn-save" onclick="createBucket()">新增</button>
-    </div>
-  </div>
-</div>
-
-<!-- Settings Tab View -->
-<div class="content" id="settings-view" style="display:none">
-  <div style="max-width:580px;margin:0 auto;">
-
-    <div class="config-section">
-      <h3>服务状态</h3>
-      <div id="settings-status" style="font-size:13px;color:var(--text-dim);line-height:2;">加载中…</div>
-      <button onclick="loadSettingsStatus()" style="margin-top:8px;font-size:12px;padding:4px 12px;">刷新状态</button>
-    </div>
-
-    <div class="config-section">
-      <h3>📦 备份记忆</h3>
-      <p style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">一键下载所有记忆文件（.tar.gz），建议每月备份一次</p>
-      <button id="backup-btn" onclick="downloadBackup()" style="padding:10px 20px;border-radius:10px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-size:13px;cursor:pointer;">📦 下载备份</button>
-      <span id="backup-status" style="margin-left:10px;font-size:12px;color:var(--text-dim);"></span>
-    </div>
-
-    <div class="config-section">
-      <h3>修改密码</h3>
-      <div id="settings-env-notice" style="display:none;font-size:12px;color:var(--warning);margin-bottom:10px;">
-        ⚠ 当前使用环境变量 OMBRE_DASHBOARD_PASSWORD，请直接修改环境变量。
-      </div>
-      <div id="settings-pwd-form">
-        <div class="config-row">
-          <label>当前密码</label>
-          <input type="password" id="settings-current-pwd" placeholder="当前密码" />
-        </div>
-        <div class="config-row">
-          <label>新密码</label>
-          <input type="password" id="settings-new-pwd" placeholder="新密码（至少6位）" />
-        </div>
-        <div class="config-row">
-          <label>确认新密码</label>
-          <input type="password" id="settings-new-pwd2" placeholder="再次输入新密码" />
-        </div>
-        <button class="btn-primary" onclick="changePassword()" style="margin-top:4px;">修改密码</button>
-        <div id="settings-pwd-msg" style="margin-top:10px;font-size:13px;"></div>
-      </div>
-    </div>
-
-    <div class="config-section">
-      <h3>宿主机记忆桶目录 (Docker)</h3>
-      <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;line-height:1.6;">
-        设置 docker-compose 中 <code>${OMBRE_HOST_VAULT_DIR:-./buckets}:/data</code> 的宿主机路径。
-        留空则使用项目内 <code>./buckets</code>。
-        <span style="color:var(--warning);">⚠ 修改后需在宿主机执行 <code>docker compose down && docker compose up -d</code> 才会生效。</span>
-      </div>
-      <div class="config-row">
-        <label>路径</label>
-        <input type="text" id="settings-host-vault" placeholder="例如 /Users/you/Obsidian/Ombre Brain" style="flex:1;" />
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;margin-top:6px;">
-        <button class="btn-primary" onclick="saveHostVault()">保存到 .env</button>
-        <button onclick="loadHostVault()" style="font-size:12px;padding:4px 12px;">重新加载</button>
-        <span id="settings-host-vault-msg" style="font-size:12px;"></span>
-      </div>
-    </div>
-
-    <div class="config-section">
-      <h3>账号操作</h3>
-      <button onclick="doLogout()" style="color:var(--negative);border-color:var(--negative);">退出登录</button>
-    </div>
-
-  </div>
-</div>
-
-<!-- Export Tab View — 记忆导出（给Qwen等无MCP客户端用） -->
-<div class="content" id="export-view" style="display:none">
-  <div style="max-width:640px;margin:0 auto;">
-    <div class="config-section">
-      <h3>🫁 记忆导出</h3>
-      <p style="font-size:12px;color:var(--text-dim);margin-bottom:16px;">模拟呼吸，将记忆导出为文本。可粘贴到任何AI的system prompt中。</p>
-
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
-        <input type="text" id="export-query" placeholder="搜索关键词（留空=自动浮现）" style="flex:1;min-width:180px;padding:8px 14px;border:1px solid var(--border);border-radius:10px;background:var(--surface-solid);color:var(--text);font-size:13px;" />
-        <select id="export-filter" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface-solid);color:var(--text);font-size:13px;">
-          <option value="all">全部记忆</option>
-          <option value="pinned">📌 仅钉选</option>
-          <option value="important">⭐ 重要度≥8</option>
-        </select>
-        <select id="export-count" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface-solid);color:var(--text);font-size:13px;">
-          <option value="5">5条</option>
-          <option value="10" selected>10条</option>
-          <option value="15">15条</option>
-          <option value="20">20条</option>
-          <option value="30">30条</option>
-        </select>
-      </div>
-
-      <div style="display:flex;gap:8px;margin-bottom:16px;">
-        <button onclick="doExportBreath()" style="padding:10px 20px;border-radius:10px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-size:13px;cursor:pointer;">🫁 呼吸</button>
-        <button onclick="doExportCopy()" id="export-copy-btn" style="display:none;padding:10px 16px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;cursor:pointer;">📋 复制到剪贴板</button>
-        <button onclick="doExportDownload()" id="export-dl-btn" style="display:none;padding:10px 16px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;cursor:pointer;">📄 下载txt</button>
-      </div>
-
-      <div id="export-status" style="font-size:12px;color:var(--text-dim);margin-bottom:8px;"></div>
-      <pre id="export-result" style="display:none;background:var(--surface-solid);border:1px solid var(--border);border-radius:12px;padding:16px;font-size:12px;line-height:1.6;color:var(--text);white-space:pre-wrap;word-break:break-word;max-height:500px;overflow-y:auto;"></pre>
-    </div>
-  </div>
-</div>
-
-<!-- Auth Overlay -->
-<div id="auth-overlay" style="position:fixed;inset:0;z-index:9999;background:var(--bg-gradient);background-attachment:fixed;display:flex;align-items:center;justify-content:center;">
-  <div style="background:var(--surface);backdrop-filter:blur(16px);border:1px solid var(--border);border-radius:24px;padding:48px 40px;max-width:400px;width:90%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,0.12);">
-    <h2 style="font-family:'Cormorant Garamond',serif;font-size:28px;color:var(--accent);margin-bottom:8px;">◐ Ombre Brain</h2>
-    <p style="color:var(--text-dim);font-size:13px;margin-bottom:28px;" id="auth-subtitle">验证身份</p>
-
-    <!-- Setup form -->
-    <div id="auth-setup-form" style="display:none;">
-      <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px;">首次使用，请设置访问密码</p>
-      <input type="password" id="auth-setup-pwd" placeholder="设置密码（至少6位）" style="display:block;width:100%;padding:10px 16px;border:1px solid var(--border);border-radius:10px;background:var(--surface-solid);color:var(--text);font-size:14px;margin-bottom:10px;" />
-      <input type="password" id="auth-setup-pwd2" placeholder="确认密码" style="display:block;width:100%;padding:10px 16px;border:1px solid var(--border);border-radius:10px;background:var(--surface-solid);color:var(--text);font-size:14px;margin-bottom:16px;" onkeydown="if(event.key==='Enter')doSetup()" />
-      <button onclick="doSetup()" style="width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:14px;cursor:pointer;">设置密码并进入</button>
-    </div>
-
-    <!-- Login form -->
-    <div id="auth-login-form" style="display:none;">
-      <input type="password" id="auth-login-pwd" placeholder="输入访问密码" style="display:block;width:100%;padding:10px 16px;border:1px solid var(--border);border-radius:10px;background:var(--surface-solid);color:var(--text);font-size:14px;margin-bottom:16px;" onkeydown="if(event.key==='Enter')doLogin()" />
-      <button onclick="doLogin()" style="width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:10px;font-size:14px;cursor:pointer;">登录</button>
-    </div>
-
-    <div id="auth-error" style="color:var(--negative);font-size:13px;margin-top:12px;display:none;"></div>
-  </div>
-</div>
-
-<!-- Three.js removed: replaced with Canvas 2D for performance -->
-
-<script>
-// ========================================
-// Auth system / 认证系统
-// ========================================
-async function checkAuth() {
-  try {
-    const resp = await fetch('/auth/status');
-    const data = await resp.json();
-    if (data.setup_needed) {
-      document.getElementById('auth-subtitle').textContent = '首次设置';
-      document.getElementById('auth-setup-form').style.display = 'block';
-    } else if (data.authenticated) {
-      document.getElementById('auth-overlay').style.display = 'none';
-    } else {
-      document.getElementById('auth-subtitle').textContent = '请输入访问密码';
-      document.getElementById('auth-login-form').style.display = 'block';
-    }
-  } catch {
-    document.getElementById('auth-overlay').style.display = 'none';
-  }
-}
-
-function showAuthError(msg) {
-  const el = document.getElementById('auth-error');
-  el.textContent = msg;
-  el.style.display = 'block';
-}
-
-async function doSetup() {
-  const p1 = document.getElementById('auth-setup-pwd').value;
-  const p2 = document.getElementById('auth-setup-pwd2').value;
-  if (p1.length < 6) return showAuthError('密码至少6位');
-  if (p1 !== p2) return showAuthError('两次密码不一致');
-  const resp = await fetch('/auth/setup', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({password: p1}) });
-  if (resp.ok) {
-    document.getElementById('auth-overlay').style.display = 'none';
-  } else {
-    const d = await resp.json();
-    showAuthError(d.detail || '设置失败');
-  }
-}
-
-async function doLogin() {
-  const pwd = document.getElementById('auth-login-pwd').value;
-  const resp = await fetch('/auth/login', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({password: pwd}) });
-  if (resp.ok) {
-    document.getElementById('auth-overlay').style.display = 'none';
-  } else {
-    const d = await resp.json();
-    showAuthError(d.detail || '密码错误');
-  }
-}
-
-async function doLogout() {
-  await fetch('/auth/logout', { method: 'POST' });
-  document.getElementById('auth-setup-form').style.display = 'none';
-  document.getElementById('auth-login-form').style.display = 'none';
-  document.getElementById('auth-login-form').style.display = 'block';
-  document.getElementById('auth-subtitle').textContent = '请输入访问密码';
-  document.getElementById('auth-error').style.display = 'none';
-  document.getElementById('auth-overlay').style.display = 'flex';
-}
-
-async function changePassword() {
-  const currentPwd = document.getElementById('settings-current-pwd').value;
-  const newPwd = document.getElementById('settings-new-pwd').value;
-  const newPwd2 = document.getElementById('settings-new-pwd2').value;
-  const msgEl = document.getElementById('settings-pwd-msg');
-  if (newPwd.length < 6) { msgEl.style.color = 'var(--negative)'; msgEl.textContent = '新密码至少6位'; return; }
-  if (newPwd !== newPwd2) { msgEl.style.color = 'var(--negative)'; msgEl.textContent = '两次密码不一致'; return; }
-  const resp = await authFetch('/auth/change-password', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({current: currentPwd, new: newPwd}) });
-  if (!resp) return;
-  if (resp.ok) {
-    msgEl.style.color = 'var(--accent)'; msgEl.textContent = '密码修改成功';
-    document.getElementById('settings-current-pwd').value = '';
-    document.getElementById('settings-new-pwd').value = '';
-    document.getElementById('settings-new-pwd2').value = '';
-  } else {
-    const d = await resp.json();
-    msgEl.style.color = 'var(--negative)'; msgEl.textContent = d.detail || '修改失败';
-  }
-}
-
-async function loadSettingsStatus() {
-  const el = document.getElementById('settings-status');
-  try {
-    const resp = await authFetch('/api/status');
-    if (!resp) return;
-    const d = await resp.json();
-    const noticeEl = document.getElementById('settings-env-notice');
-    if (d.using_env_password) noticeEl.style.display = 'block';
-    else noticeEl.style.display = 'none';
-    el.innerHTML = `
-      <b>版本</b>：${d.version}<br>
-      <b>Bucket 总数</b>：${(d.buckets?.total ?? 0)} （永久:${d.buckets?.permanent ?? 0} / 动态:${d.buckets?.dynamic ?? 0} / 归档:${d.buckets?.archive ?? 0}）<br>
-      <b>衰减引擎</b>：${d.decay_engine}<br>
-      <b>向量搜索</b>：${d.embedding_enabled ? '已启用' : '未启用'}<br>
-      <b>🖼 图片识别</b>：${d.vision?.enabled ? '✅ ' + (d.vision?.model || '') + ' (' + (d.vision?.mode || '') + ')' : '❌ 未配置（需设 OMBRE_VISION_API_KEY）'}<br>
-    `;
-  } catch(e) {
-    el.textContent = '加载失败: ' + e;
-  }
-  // Also refresh the host-vault input whenever the settings tab is loaded.
-  loadHostVault();
-}
-
-async function downloadBackup() {
-  var btn = document.getElementById('backup-btn');
-  var status = document.getElementById('backup-status');
-  btn.textContent = '📦 打包中…';
-  btn.disabled = true;
-  status.textContent = '';
-  try {
-    var resp = await authFetch('/api/backup');
-    if (!resp || !resp.ok) throw new Error('下载失败 (' + (resp ? resp.status : 'no response') + ')');
-    var blob = await resp.blob();
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    var disp = resp.headers.get('content-disposition') || '';
-    var match = disp.match(/filename="?([^"]+)"?/);
-    a.download = match ? match[1] : 'ombre_backup.tar.gz';
-    a.href = url;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    status.textContent = '✅ 已下载';
-    status.style.color = 'var(--positive)';
-  } catch (e) {
-    status.textContent = '❌ ' + e.message;
-    status.style.color = 'var(--negative)';
-  }
-  btn.textContent = '📦 下载备份';
-  btn.disabled = false;
-}
-
-async function loadHostVault() {
-  const input = document.getElementById('settings-host-vault');
-  const msg = document.getElementById('settings-host-vault-msg');
-  if (!input) return;
-  msg.textContent = '';
-  msg.style.color = 'var(--text-dim)';
-  try {
-    const resp = await authFetch('/api/host-vault');
-    if (!resp) return;
-    const d = await resp.json();
-    input.value = d.value || '';
-    if (d.source === 'env') {
-      msg.textContent = '当前由进程环境变量提供（修改 .env 不会立即覆盖）';
-      msg.style.color = 'var(--warning)';
-    } else if (d.source === 'file') {
-      msg.textContent = '当前来自 ' + (d.env_file || '.env');
-    } else {
-      msg.textContent = '尚未设置（默认使用 ./buckets）';
-    }
-  } catch(e) {
-    msg.style.color = 'var(--negative)';
-    msg.textContent = '加载失败: ' + e;
-  }
-}
-
-async function saveHostVault() {
-  const input = document.getElementById('settings-host-vault');
-  const msg = document.getElementById('settings-host-vault-msg');
-  if (!input) return;
-  const value = input.value.trim();
-  msg.textContent = '保存中…';
-  msg.style.color = 'var(--text-dim)';
-  try {
-    const resp = await authFetch('/api/host-vault', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({value})
-    });
-    if (!resp) return;
-    const d = await resp.json();
-    if (resp.ok) {
-      msg.style.color = 'var(--accent)';
-      msg.textContent = '已保存 → ' + (d.env_file || '.env') + '（需重启容器生效）';
-    } else {
-      msg.style.color = 'var(--negative)';
-      msg.textContent = d.error || '保存失败';
-    }
-  } catch(e) {
-    msg.style.color = 'var(--negative)';
-    msg.textContent = '保存失败: ' + e;
-  }
-}
-
-// authFetch: wraps fetch, shows auth overlay on 401
-async function authFetch(url, options) {
-  const resp = await fetch(url, options);
-  if (resp.status === 401) {
-    doLogout();
-    return null;
-  }
-  return resp;
-}
-
-// ========================================
-
-const BASE = location.origin;
-let allBuckets = [];
-let currentFilter = 'all';
-let pageSize = 50;
-let currentPage = 1;
-let currentDisplayBuckets = [];
-
-document.querySelectorAll('.tab').forEach(tab => {
-  tab.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-    tab.classList.add('active');
-    const target = tab.dataset.tab;
-    document.getElementById('list-view').style.display = target === 'list' ? '' : 'none';
-    document.getElementById('timeline-view').style.display = target === 'timeline' ? '' : 'none';
-    document.getElementById('letters-view').style.display = target === 'letters' ? '' : 'none';
-    document.getElementById('plans-view').style.display = target === 'plans' ? '' : 'none';
-    document.getElementById('selfknow-view').style.display = target === 'selfknow' ? '' : 'none';
-    document.getElementById('anchors-view').style.display = target === 'anchors' ? '' : 'none';
-    document.getElementById('gallery-view').style.display = target === 'gallery' ? '' : 'none';
-    document.getElementById('breath-view').style.display = target === 'breath' ? '' : 'none';
-    document.getElementById('network-view').style.display = target === 'network' ? '' : 'none';
-    document.getElementById('config-view').style.display = target === 'config' ? '' : 'none';
-    document.getElementById('import-view').style.display = target === 'import' ? '' : 'none';
-    document.getElementById('settings-view').style.display = target === 'settings' ? '' : 'none';
-    document.getElementById('export-view').style.display = target === 'export' ? '' : 'none';
-    if (target === 'timeline') renderTimeline();
-    if (target === 'letters') renderLetters();
-    if (target === 'plans') renderPlans();
-    if (target === 'selfknow') renderSelfknow();
-    if (target === 'anchors') renderAnchors();
-    if (target === 'gallery') renderGallery();
-    if (target === 'network' && !networkLoaded) loadNetwork();
-    if (target === 'config') loadConfig();
-    if (target === 'import') { pollImportStatus(); loadImportResults(); }
-    if (target === 'settings') loadSettingsStatus();
-  });
-});
-
-let searchTimer;
-document.getElementById('search-input').addEventListener('input', (e) => {
-  clearTimeout(searchTimer);
-  const q = e.target.value.trim();
-  searchTimer = setTimeout(() => {
-    if (q) searchBuckets(q);
-    else renderBuckets(filterBuckets(allBuckets));
-  }, 300);
-});
-
-async function loadBuckets() {
-  try {
-    const res = await fetch(BASE + '/api/buckets');
-    const data = await res.json();
-    if (!res.ok || !Array.isArray(data)) {
-      throw new Error((data && data.error) ? data.error : `HTTP ${res.status}`);
-    }
-    allBuckets = data;
-    updateStats();
-    buildFilters();
-    renderBuckets(filterBuckets(allBuckets));
-  } catch (e) {
-    document.getElementById('bucket-list').innerHTML = '<div class="loading">加载失败: ' + e.message + '</div>';
-  }
-}
-
-function updateStats() {
-  const total = allBuckets.length;
-  const pinned = allBuckets.filter(b => b.pinned).length;
-  const feels = allBuckets.filter(b => b.type === 'feel').length;
-  const resolved = allBuckets.filter(b => b.resolved).length;
-  const digested = allBuckets.filter(b => b.digested).length;
-  document.getElementById('stats').textContent =
-    total + ' 桶 · ' + pinned + ' 钉选 · ' + feels + ' feel · ' + resolved + ' 已解决 · ' + digested + ' 已消化';
-}
-
-function buildFilters() {
-  const domains = new Set();
-  allBuckets.forEach(b => (b.domain || []).forEach(d => domains.add(d)));
-  const filters = document.getElementById('filters');
-  const types = [
-    { key: 'all', label: '全部' },
-    { key: 'pinned', label: '📌 钉选' },
-    { key: 'feel', label: '🫧 Feel' },
-    { key: 'unresolved', label: '⚡ 未解决' },
-    { key: 'digested', label: '🌿 已消化' },
-    { key: 'archived', label: '📦 归档' },
-  ];
-  filters.innerHTML = types.map(function(t) {
-    return '<button class="filter-btn ' + (t.key === 'all' ? 'active' : '') + '" data-filter="' + t.key + '">' + t.label + '</button>';
-  }).join('') + Array.from(domains).slice(0, 10).map(function(d) {
-    return '<button class="filter-btn" data-filter="domain:' + d + '">' + d + '</button>';
-  }).join('');
-
-  filters.addEventListener('click', function(e) {
-    var btn = e.target.closest('.filter-btn');
-    if (!btn) return;
-    filters.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
-    btn.classList.add('active');
-    currentFilter = btn.dataset.filter;
-    renderBuckets(filterBuckets(allBuckets));
-  });
-}
-
-function filterBuckets(buckets) {
-  if (currentFilter === 'all') return buckets.filter(function(b) { return b.event_type !== 'i' && b.event_type !== 'letter' && b.event_type !== 'plan' && !b.anchor; });
-  if (currentFilter === 'pinned') return buckets.filter(function(b) { return b.pinned; });
-  if (currentFilter === 'feel') return buckets.filter(function(b) { return b.type === 'feel'; });
-  if (currentFilter === 'unresolved') return buckets.filter(function(b) { return !b.resolved && b.type !== 'permanent' && !b.pinned; });
-  if (currentFilter === 'digested') return buckets.filter(function(b) { return b.digested; });
-  if (currentFilter === 'archived') return buckets.filter(function(b) { return b.type === 'archived' || b.score < 0.3; });
-  if (currentFilter.startsWith('domain:')) {
-    var d = currentFilter.slice(7);
-    return buckets.filter(function(b) { return (b.domain || []).includes(d); });
-  }
-  return buckets;
-}
-
-function renderBuckets(buckets) {
-  currentDisplayBuckets = buckets;
-  currentPage = 1;
-  renderPage();
-}
-
-function renderPage() {
-  var list = document.getElementById('bucket-list');
-  var buckets = currentDisplayBuckets;
-  if (!buckets.length) {
-    list.innerHTML = '<div class="loading">没有记忆桶</div>';
-    return;
-  }
-  var end = currentPage * pageSize;
-  var visible = buckets.slice(0, end);
-  var hasMore = end < buckets.length;
-  var remaining = buckets.length - end;
-  list.innerHTML = visible.map(function(b) {
-    var icon = b.pinned ? '📌' : b.type === 'feel' ? '🫧' : b.digested ? '🌿' : b.resolved ? '💤' : '💭';
-    var vPos = Math.round(b.valence * 100);
-    var modelV = b.model_valence != null ? ' → V' + b.model_valence.toFixed(1) : '';
-    var timeAgo = formatTimeAgo(b.last_active || b.created);
-    var checkbox = batchMode ? '<input type="checkbox" class="batch-check" data-id="' + b.id + '" onclick="event.stopPropagation();updateBatchCount()">' : '';
-    return '<div class="bucket-row" onclick="showDetail(\'' + b.id + '\')">' +
-      checkbox +
-      '<span class="icon">' + icon + '</span>' +
-      '<span class="name" title="' + esc(b.name) + '">' + esc(b.name) + (b.media && b.media.length ? ' 📷' : '') + '</span>' +
-      '<span class="domain">' + (b.domain || []).join(', ') + '</span>' +
-      '<span class="emotion"><span class="v-bar"><span class="v-dot" style="left:' + vPos + '%"></span></span>' + modelV + '</span>' +
-      '<span class="score">' + b.score.toFixed(2) + '</span>' +
-      '<span class="time">' + timeAgo + '</span>' +
-      '<span class="preview">' + esc(b.content_preview) + '</span>' +
-    '</div>';
-  }).join('') + (hasMore ?
-    '<div class="load-more-btn" onclick="loadMoreBuckets()">加载更多（已显示 ' + visible.length + ' / ' + buckets.length + '，剩余 ' + remaining + ' 条）</div>' :
-    '<div class="load-more-done">全部 ' + buckets.length + ' 条已显示 ✓</div>');
-}
-
-function loadMoreBuckets() {
-  currentPage++;
-  renderPage();
-}
-
-var batchMode = false;
-function toggleBatchMode() {
-  batchMode = !batchMode;
-  var btn = document.getElementById('batch-toggle');
-  var bar = document.getElementById('batch-bar');
-  btn.textContent = batchMode ? '✕ 退出批量' : '☑ 批量';
-  if (batchMode) { bar.classList.add('active'); } else { bar.classList.remove('active'); }
-  renderBuckets(filterBuckets(allBuckets));
-}
-
-function updateBatchCount() {
-  var checked = document.querySelectorAll('.batch-check:checked');
-  document.getElementById('batch-count').textContent = '已选 ' + checked.length + ' 条';
-}
-
-function batchSelectAll() {
-  var boxes = document.querySelectorAll('.batch-check');
-  var allChecked = Array.from(boxes).every(function(b) { return b.checked; });
-  boxes.forEach(function(b) { b.checked = !allChecked; });
-  updateBatchCount();
-}
-
-async function batchAction(action) {
-  var checked = document.querySelectorAll('.batch-check:checked');
-  if (!checked.length) { alert('请先勾选记忆'); return; }
-  var ids = Array.from(checked).map(function(b) { return b.dataset.id; });
-  var msg = action === 'delete' ? '确定删除 ' + ids.length + ' 条记忆？此操作不可撤销。' : '确定标记 ' + ids.length + ' 条记忆为已解决？';
-  if (!confirm(msg)) return;
-  try {
-    var res = await fetch(BASE + '/api/buckets/batch', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ action: action, ids: ids })
-    });
-    if (!res.ok) throw new Error('操作失败');
-    var data = await res.json();
-    alert('成功 ' + data.success + ' 条' + (data.failed ? '，失败 ' + data.failed + ' 条' : ''));
-    batchMode = false;
-    document.getElementById('batch-bar').classList.remove('active');
-    document.getElementById('batch-toggle').textContent = '☑ 批量';
-    loadBuckets();
-  } catch (e) {
-    alert('操作失败: ' + e.message);
-  }
-}
-
-var timelineMonthKeys = [];
-var timelineMonths = {};
-var timelineMonthPage = 0;
-var timelineMonthsPerPage = 3;
-var timelineFiltered = [];
-
-function renderTimeline() {
-  if (!allBuckets.length) {
-    document.getElementById('timeline-content').innerHTML = '<div class="loading">没有记忆</div>';
-    return;
-  }
-  // Populate year/month/day dropdowns
-  var years = new Set(), months = new Set(), days = new Set();
-  allBuckets.forEach(function(b) {
-    if (b.created) {
-      var y = b.created.substring(0, 4);
-      var m = b.created.substring(5, 7);
-      var d = b.created.substring(8, 10);
-      if (y) years.add(y);
-      if (m) months.add(m);
-      if (d) days.add(d);
-    }
-  });
-  var yearSel = document.getElementById('tl-year');
-  var oldYear = yearSel.value;
-  yearSel.innerHTML = '<option value="">全部年份</option>';
-  Array.from(years).sort().reverse().forEach(function(y) {
-    yearSel.innerHTML += '<option value="' + y + '">' + y + '年</option>';
-  });
-  yearSel.value = oldYear;
-  var monthSel = document.getElementById('tl-month');
-  var oldMonth = monthSel.value;
-  monthSel.innerHTML = '<option value="">全部月份</option>';
-  Array.from(months).sort().forEach(function(m) {
-    monthSel.innerHTML += '<option value="' + m + '">' + parseInt(m) + '月</option>';
-  });
-  monthSel.value = oldMonth;
-  var daySel = document.getElementById('tl-day');
-  var oldDay = daySel.value;
-  daySel.innerHTML = '<option value="">全部日期</option>';
-  Array.from(days).sort().forEach(function(d) {
-    daySel.innerHTML += '<option value="' + d + '">' + parseInt(d) + '日</option>';
-  });
-  daySel.value = oldDay;
-  filterTimeline();
-}
-
-function filterTimeline() {
-  var el = document.getElementById('timeline-content');
-  var yearVal = document.getElementById('tl-year').value;
-  var monthVal = document.getElementById('tl-month').value;
-  var dayVal = document.getElementById('tl-day').value;
-  var searchVal = (document.getElementById('tl-search').value || '').trim().toLowerCase();
-  var sorted = allBuckets.slice().sort(function(a, b) {
-    return (b.created || '').localeCompare(a.created || '');
-  });
-  var filtered = sorted.filter(function(b) {
-    if (!b.created) return false;
-    if (yearVal && b.created.substring(0, 4) !== yearVal) return false;
-    if (monthVal && b.created.substring(5, 7) !== monthVal) return false;
-    if (dayVal && b.created.substring(8, 10) !== dayVal) return false;
-    if (searchVal) {
-      var haystack = (
-        (b.name || '') + ' ' +
-        (b.content_preview || '') + ' ' +
-        (b.tags || []).join(' ') + ' ' +
-        (b.id || '') + ' ' +
-        (b.domain || '') + ' ' +
-        (b.created || '') + ' ' +
-        (b.last_active || '') + ' ' +
-        (b.event_type || '') + ' ' +
-        (b.source || '') + ' ' +
-        ((b.meaning || []).join(' ')) + ' ' +
-        ((b.media || []).map(function(m) { return (m.title || '') + ' ' + (m.description || ''); }).join(' '))
-      ).toLowerCase();
-      if (haystack.indexOf(searchVal) === -1) return false;
-    }
-    return true;
-  });
-  if (!filtered.length) {
-    el.innerHTML = '<div class="loading" style="color:var(--text-dim);">没有匹配的记忆</div>';
-    return;
-  }
-  timelineMonths = {};
-  filtered.forEach(function(b) {
-    var d = b.created ? b.created.substring(0, 7) : '未知';
-    if (!timelineMonths[d]) timelineMonths[d] = [];
-    timelineMonths[d].push(b);
-  });
-  timelineMonthKeys = Object.keys(timelineMonths).sort().reverse();
-  timelineMonthPage = 1;
-  renderTimelinePage(el, filtered.length);
-}
-
-function renderTimelinePage(el, totalCount) {
-  if (!el) el = document.getElementById('timeline-content');
-  var end = timelineMonthPage * timelineMonthsPerPage;
-  var visibleKeys = timelineMonthKeys.slice(0, end);
-  var hasMore = end < timelineMonthKeys.length;
-  var remaining = timelineMonthKeys.length - end;
-  var html = '<div style="margin-bottom:10px;color:var(--text-dim);font-size:12px;">共 ' + (totalCount || '?') + ' 条记忆</div>';
-  visibleKeys.forEach(function(m) {
-    var label = m;
-    try {
-      var parts = m.split('-');
-      label = parts[0] + '年' + parseInt(parts[1]) + '月';
-    } catch(e) {}
-    html += '<div class="timeline-month"><h3>' + label + ' (' + timelineMonths[m].length + ')</h3>';
-    timelineMonths[m].forEach(function(b) {
-      var icon = b.pinned ? '📌' : b.type === 'feel' ? '🫧' : b.digested ? '🌿' : b.resolved ? '💤' : '💭';
-      var day = b.created ? b.created.substring(8, 10) + '日' : '';
-      html += '<div class="timeline-item" onclick="showDetail(\'' + b.id + '\')">' +
-        '<div class="timeline-date">' + day + '</div>' +
-        '<div class="timeline-icon">' + icon + '</div>' +
-        '<div class="timeline-body">' +
-          '<div class="timeline-name">' + esc(b.name) + (b.media && b.media.length ? ' 📷' : '') + '</div>' +
-          '<div class="timeline-preview">' + esc(b.content_preview) + '</div>' +
-        '</div>' +
-      '</div>';
-    });
-    html += '</div>';
-  });
-  html += hasMore ?
-    '<div class="load-more-btn" onclick="loadMoreTimeline()">加载更多月份（已显示 ' + visibleKeys.length + ' / ' + timelineMonthKeys.length + ' 个月，剩余 ' + remaining + '）</div>' :
-    '<div class="load-more-done">全部 ' + timelineMonthKeys.length + ' 个月已显示 ✓</div>';
-  el.innerHTML = html;
-}
-
-function loadMoreTimeline() {
-  timelineMonthPage++;
-  renderTimelinePage();
-}
-
-var allLetters = [];
-var lettersPage = 1;
-var lettersPerPage = 10;
-
-function renderLetters() {
-  var el = document.getElementById('letters-list');
-  allLetters = allBuckets.filter(function(b) { return b.event_type === 'letter'; });
-  if (!allLetters.length) {
-    el.innerHTML = '<div class="loading" style="color:var(--text-dim);">还没有信件。用 <code>letter_write</code> 写第一封吧 ✉️</div>';
-    return;
-  }
-  allLetters.sort(function(a, b) { return (b.created || '').localeCompare(a.created || ''); });
-  lettersPage = 1;
-  renderLettersPage(el);
-}
-
-function renderLettersPage(el) {
-  if (!el) el = document.getElementById('letters-list');
-  var end = lettersPage * lettersPerPage;
-  var visible = allLetters.slice(0, end);
-  var hasMore = end < allLetters.length;
-  var remaining = allLetters.length - end;
-  var html = '<div style="margin-bottom:12px;color:var(--text-dim);font-size:13px;">共 ' + allLetters.length + ' 封信</div>';
-  visible.forEach(function(b) {
-    var to = '—';
-    (b.tags || []).forEach(function(t) { if (t.indexOf('致:') === 0) to = t.substring(2); });
-    var date = b.created ? b.created.substring(0, 10) : '';
-    html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px;cursor:pointer;" onclick="showDetail(\'' + b.id + '\')">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
-        '<div style="font-size:16px;font-weight:600;color:var(--text);">✉️ ' + esc(b.name) + '</div>' +
-        '<div style="font-size:12px;color:var(--text-dim);">' + date + '</div>' +
-      '</div>' +
-      '<div style="font-size:12px;color:var(--accent);margin-bottom:10px;">致：' + esc(to) + '</div>' +
-      '<div style="font-size:14px;color:var(--text);line-height:1.7;white-space:pre-wrap;">' + esc(b.content_preview || '') + '</div>' +
-    '</div>';
-  });
-  html += hasMore ?
-    '<div class="load-more-btn" onclick="loadMoreLetters()">加载更多信件（已显示 ' + visible.length + ' / ' + allLetters.length + '，剩余 ' + remaining + ' 封）</div>' :
-    '<div class="load-more-done">全部 ' + allLetters.length + ' 封信已显示 ✓</div>';
-  el.innerHTML = html;
-}
-
-function loadMoreLetters() {
-  lettersPage++;
-  renderLettersPage();
-}
-
-var allDonePlans = [];
-var donePlansPage = 1;
-var donePlansPerPage = 10;
-
-function renderPlans() {
-  var el = document.getElementById('plans-list');
-  var plans = allBuckets.filter(function(b) { return b.event_type === 'plan'; });
-  if (!plans.length) {
-    el.innerHTML = '<div class="loading" style="color:var(--text-dim);">还没有计划。用 <code>plan</code> 创建第一个吧 📋</div>';
-    return;
-  }
-  var active = plans.filter(function(b) { return !b.resolved; });
-  allDonePlans = plans.filter(function(b) { return b.resolved; });
-  active.sort(function(a, b) { return (b.created || '').localeCompare(a.created || ''); });
-  allDonePlans.sort(function(a, b) { return (b.created || '').localeCompare(a.created || ''); });
-  donePlansPage = 1;
-  var html = '';
-  if (active.length) {
-    html += '<div style="margin-bottom:8px;font-size:14px;font-weight:600;color:var(--text);">⏳ 进行中（' + active.length + '）</div>';
-    active.forEach(function(b) {
-      var due = '';
-      (b.tags || []).forEach(function(t) { if (t.indexOf('截止:') === 0) due = ' · 截止: ' + t.substring(3); });
-      html += '<div style="background:var(--surface);border:1px solid var(--accent);border-radius:10px;padding:16px;margin-bottom:10px;cursor:pointer;" onclick="showDetail(\'' + b.id + '\')">' +
-        '<div style="display:flex;justify-content:space-between;align-items:center;">' +
-          '<div style="font-size:14px;font-weight:500;color:var(--text);">📋 ' + esc(b.name) + '</div>' +
-          '<div style="font-size:11px;color:var(--text-dim);">' + (b.created || '').substring(0, 10) + due + '</div>' +
-        '</div>' +
-        '<div style="font-size:13px;color:var(--text);margin-top:8px;line-height:1.6;">' + esc(b.content_preview || '') + '</div>' +
-      '</div>';
-    });
-  }
-  el.innerHTML = html;
-  renderDonePlans(el);
-}
-
-function renderDonePlans(el) {
-  if (!el) el = document.getElementById('plans-list');
-  if (!allDonePlans.length) return;
-  var end = donePlansPage * donePlansPerPage;
-  var visible = allDonePlans.slice(0, end);
-  var hasMore = end < allDonePlans.length;
-  var remaining = allDonePlans.length - end;
-  var doneEl = document.getElementById('plans-done-section');
-  if (!doneEl) {
-    doneEl = document.createElement('div');
-    doneEl.id = 'plans-done-section';
-    el.appendChild(doneEl);
-  }
-  var html = '<div style="margin:20px 0 8px;font-size:14px;font-weight:600;color:var(--text-dim);">✅ 已完成（' + allDonePlans.length + '）</div>';
-  visible.forEach(function(b) {
-    html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px;opacity:0.6;cursor:pointer;" onclick="showDetail(\'' + b.id + '\')">' +
-      '<div style="font-size:14px;color:var(--text-dim);">✅ ' + esc(b.name) + '</div>' +
-      '<div style="font-size:13px;color:var(--text-dim);margin-top:6px;">' + esc(b.content_preview || '') + '</div>' +
-    '</div>';
-  });
-  html += hasMore ?
-    '<div class="load-more-btn" onclick="loadMoreDonePlans()">加载更多已完成（已显示 ' + visible.length + ' / ' + allDonePlans.length + '，剩余 ' + remaining + '）</div>' :
-    '<div class="load-more-done">全部 ' + allDonePlans.length + ' 个已完成 ✓</div>';
-  doneEl.innerHTML = html;
-}
-
-function loadMoreDonePlans() {
-  donePlansPage++;
-  renderDonePlans();
-}
-
-function renderSelfknow() {
-  var el = document.getElementById('selfknow-list');
-  var items = allBuckets.filter(function(b) { return b.event_type === 'i'; });
-  if (!items.length) {
-    el.innerHTML = '<div class="loading" style="color:var(--text-dim);">还没有自我认知记录。用 <code>I(content="...")</code> 写第一条吧 🪞</div>';
-    return;
-  }
-  items.sort(function(a, b) { return (b.created || '').localeCompare(a.created || ''); });
-  var aspects = {'nature':'本质','values':'价值观','patterns':'规律','limits':'局限','becoming':'成长中','uncertainty':'不确定','stance':'立场'};
-  var html = '<div style="margin-bottom:12px;color:var(--text-dim);font-size:13px;">共 ' + items.length + ' 条自我认知</div>';
-  items.forEach(function(b) {
-    var aspect = '';
-    (b.tags || []).forEach(function(t) { if (t.indexOf('aspect:') === 0) aspect = t.substring(7); });
-    var aspectLabel = aspect ? (aspects[aspect] || aspect) : '';
-    var date = b.created ? b.created.substring(0, 10) : '';
-    var badge = aspectLabel ? '<span style="display:inline-block;background:var(--accent);color:#fff;font-size:11px;padding:2px 8px;border-radius:10px;margin-right:8px;">' + esc(aspectLabel) + '</span>' : '';
-    html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px;cursor:pointer;" onclick="showDetail(\'' + b.id + '\')">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
-        '<div>' + badge + '<span style="font-size:13px;color:var(--text-dim);">' + date + '</span></div>' +
-        '<div style="font-size:12px;color:var(--text-dim);">' + b.id.substring(0,8) + '</div>' +
-      '</div>' +
-      '<div style="font-size:14px;color:var(--text);line-height:1.7;">' + esc(b.content_preview || '') + '</div>' +
-    '</div>';
-  });
-  el.innerHTML = html;
-}
-
-function renderAnchors() {
-  var el = document.getElementById('anchors-list');
-  var items = allBuckets.filter(function(b) { return b.anchor; });
-  if (!items.length) {
-    el.innerHTML = '<div class="loading" style="color:var(--text-dim);">还没有坐标系桶。用 <code>anchor(bucket_id)</code> 把重要但不需要每次浮现的桶放进坐标系 ⚓</div>';
-    return;
-  }
-  items.sort(function(a, b) { return (b.importance || 5) - (a.importance || 5); });
-  var html = '<div style="margin-bottom:12px;color:var(--text-dim);font-size:13px;">共 ' + items.length + '/24 个坐标系桶</div>';
-  items.forEach(function(b) {
-    var date = b.created ? b.created.substring(0, 10) : '';
-    var domains = (b.domain || []).join(', ') || '未分类';
-    html += '<div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:10px;padding:16px;margin-bottom:10px;cursor:pointer;" onclick="showDetail(\'' + b.id + '\')">' +
-      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
-        '<div style="font-weight:600;color:var(--text);">⚓ ' + esc(b.name || b.id.substring(0,12)) + '</div>' +
-        '<div style="font-size:12px;color:var(--text-dim);">重要度 ' + (b.importance || 5) + '/10</div>' +
-      '</div>' +
-      '<div style="font-size:13px;color:var(--text-dim);margin-bottom:6px;">' + esc(domains) + ' · ' + date + '</div>' +
-      '<div style="font-size:14px;color:var(--text);line-height:1.7;">' + esc(b.content_preview || '') + '</div>' +
-    '</div>';
-  });
-  el.innerHTML = html;
-}
-
-function renderGallery() {
-  var el = document.getElementById('gallery-list');
-  var gallery = [];
-  allBuckets.forEach(function(b) {
-    var media = b.media || [];
-    if (!media.length) return;
-    media.forEach(function(m) {
-      if (!m || !m.path) return;
-      gallery.push({ media: m, bucketId: b.id, bucketName: b.name || b.id.substring(0,12), created: b.created || '' });
-    });
-  });
-  if (!gallery.length) {
-    el.innerHTML = '<div class="loading" style="color:var(--text-dim);">还没有上传过图片。在记忆详情里点 🖼上传图片 即可</div>';
-    return;
-  }
-  gallery.sort(function(a, b) { return (b.created || '').localeCompare(a.created || ''); });
-  var html = '<div style="margin-bottom:12px;color:var(--text-dim);font-size:13px;">共 ' + gallery.length + ' 张图片</div>';
-  html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;">';
-  gallery.forEach(function(item) {
-    var m = item.media;
-    var path = m.path || '';
-    var title = m.title || '图片';
-    var desc = m.description || '';
-    var isUrl = path.startsWith('http') || path.startsWith('data:');
-    var imgUrl = isUrl ? path : (m.stored ? (BASE + '/api/media/' + path) : path);
-    html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;">' +
-      '<img src="' + esc(imgUrl) + '" alt="' + esc(title) + '" style="width:100%;height:140px;object-fit:cover;cursor:pointer;" onclick="openLightbox(\'' + esc(imgUrl) + '\')">' +
-      '<div style="padding:8px;">' +
-        '<div style="font-size:12px;color:var(--text);font-weight:600;cursor:pointer;text-decoration:underline;" onclick="showDetail(\'' + item.bucketId + '\')">' + esc(item.bucketName) + '</div>' +
-        '<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">' + esc(title) + '</div>' +
-        (desc ? '<div style="font-size:11px;color:var(--text);margin-top:4px;line-height:1.4;">📝 ' + esc(desc.substring(0,60)) + (desc.length > 60 ? '…' : '') + '</div>' : '') +
-      '</div>' +
-    '</div>';
-  });
-  html += '</div>';
-  el.innerHTML = html;
-}
-
-async function addMeaning(bucketId) {
-  var text = prompt('添加情感锚定：');
-  if (!text) return;
-  var meaning = (_currentDetail && _currentDetail.metadata ? _currentDetail.metadata.meaning : null) || [];
-  meaning.push(text);
-  try {
-    var res = await authFetch(BASE + '/api/bucket/' + bucketId, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ meaning: meaning })
-    });
-    if (res.ok) { showDetail(bucketId); } else { alert('添加失败'); }
-  } catch(e) { alert('添加出错: ' + e.message); }
-}
-
-async function editMeaning(bucketId, index) {
-  var meaning = (_currentDetail && _currentDetail.metadata ? _currentDetail.metadata.meaning : null) || [];
-  if (index >= meaning.length) { alert('索引无效'); return; }
-  var newText = prompt('编辑情感锚定：', meaning[index]);
-  if (newText === null) return;
-  meaning[index] = newText;
-  try {
-    var res = await authFetch(BASE + '/api/bucket/' + bucketId, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ meaning: meaning })
-    });
-    if (res.ok) { showDetail(bucketId); } else { alert('保存失败'); }
-  } catch(e) { alert('编辑出错: ' + e.message); }
-}
-
-async function deleteMeaning(bucketId, index) {
-  if (!confirm('确定删除这条情感锚定？')) return;
-  var meaning = (_currentDetail && _currentDetail.metadata ? _currentDetail.metadata.meaning : null) || [];
-  if (index >= meaning.length) { alert('索引无效'); return; }
-  meaning.splice(index, 1);
-  try {
-    var res = await authFetch(BASE + '/api/bucket/' + bucketId, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ meaning: meaning })
-    });
-    if (res.ok) { showDetail(bucketId); } else { alert('删除失败'); }
-  } catch(e) { alert('删除出错: ' + e.message); }
-}
-
-async function deleteMedia(bucketId, mediaIndex) {
-  if (!confirm('确定删除这张图片？')) return;
-  var media = (_currentDetail && _currentDetail.metadata ? _currentDetail.metadata.media : null) || [];
-  if (mediaIndex >= media.length) { alert('图片索引无效'); return; }
-  media.splice(mediaIndex, 1);
-  try {
-    var res = await authFetch(BASE + '/api/bucket/' + bucketId, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ media: media })
-    });
-    if (res.ok) { alert('已删除'); showDetail(bucketId); } else { alert('删除失败'); }
-  } catch(e) { alert('删除出错: ' + e.message); }
-}
-
-async function editMediaDesc(bucketId, mediaIndex, currentDesc) {
-  var newDesc = prompt('编辑图片描述：', currentDesc);
-  if (newDesc === null) return;
-  var media = (_currentDetail && _currentDetail.metadata ? _currentDetail.metadata.media : null) || [];
-  if (mediaIndex >= media.length) { alert('图片索引无效'); return; }
-  media[mediaIndex].description = newDesc;
-  try {
-    var res = await authFetch(BASE + '/api/bucket/' + bucketId, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ media: media })
-    });
-    if (res.ok) { showDetail(bucketId); } else { alert('保存失败'); }
-  } catch(e) { alert('编辑出错: ' + e.message); }
-}
-
-function openLightbox(url) {
-  var overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:pointer;';
-  overlay.onclick = function() { document.body.removeChild(overlay); };
-  var img = document.createElement('img');
-  img.src = url;
-  img.style.cssText = 'max-width:90%;max-height:90%;border-radius:8px;box-shadow:0 4px 30px rgba(0,0,0,0.5);';
-  overlay.appendChild(img);
-  document.body.appendChild(overlay);
-}
-
-async function searchBuckets(query) {
-  try {
-    var res = await fetch(BASE + '/api/search?q=' + encodeURIComponent(query));
-    var results = await res.json();
-    renderBuckets(results);
-  } catch (e) {
-    console.error('Search failed:', e);
-  }
-}
-
-var _currentDetail = null; // Cache for current detail panel data
-
-async function showDetail(id) {
-  var panel = document.getElementById('detail-panel');
-  var content = document.getElementById('detail-content');
-  content.innerHTML = '<div class="loading">加载中…</div>';
-  panel.classList.add('open');
-
-  try {
-    var res = await fetch(BASE + '/api/bucket/' + id);
-    var b = await res.json();
-    _currentDetail = b; // Cache it
-    var meta = b.metadata || {};
-    content.innerHTML =
-      '<h2>' + esc(meta.name || id) + '</h2>' +
-      '<div class="detail-meta">' +
-        '<div class="field"><label>ID</label>' + id + '</div>' +
-        '<div class="field"><label>类型</label>' + (meta.type || 'dynamic') + '</div>' +
-        '<div class="field"><label>域</label>' + (meta.domain || []).join(', ') + '</div>' +
-        '<div class="field"><label>标签</label>' + (meta.tags || []).join(', ') + '</div>' +
-        '<div class="field"><label>事件效价</label>V' + (meta.valence || 0.5).toFixed(2) + '</div>' +
-        '<div class="field"><label>唤醒度</label>A' + (meta.arousal || 0.3).toFixed(2) + '</div>' +
-        '<div class="field"><label>模型视角</label>' + (meta.model_valence != null ? 'V' + meta.model_valence.toFixed(2) : '—') + '</div>' +
-        '<div class="field"><label>重要度</label>' + (meta.importance || 5) + '/10</div>' +
-        '<div class="field"><label>权重分</label>' + b.score.toFixed(4) + '</div>' +
-        '<div class="field"><label>激活次数</label>' + (meta.activation_count || 1) + '</div>' +
-        '<div class="field"><label>已解决</label>' + (meta.resolved ? '✓' : '—') + '</div>' +
-        '<div class="field"><label>已消化</label>' + (meta.digested ? '✓' : '—') + '</div>' +
-        '<div class="field"><label>钉选</label>' + (meta.pinned ? '✓' : '—') + '</div>' +
-        '<div class="field"><label>⚓ 坐标系</label>' + (meta.anchor ? '✓' : '—') + '</div>' +
-        '<div class="field"><label>事件类型</label>' + (meta.event_type || '—') + '</div>' +
-        '<div class="field"><label>来源</label>' + (meta.source || '—') + '</div>' +
-        '<div class="field" style="grid-column:1/-1;"><label>💭 meaning</label>' + (meta.meaning && meta.meaning.length ? meta.meaning.map(function(m, i) { return '<div style="margin:4px 0;padding:6px 8px;background:var(--bg);border-radius:6px;font-size:13px;line-height:1.5;">' + esc(m) + ' <span style="cursor:pointer;color:var(--accent);font-size:11px;" onclick="editMeaning(\'' + id + '\',' + i + ')">✏️编辑</span> <span style="cursor:pointer;color:var(--negative);font-size:11px;" onclick="deleteMeaning(\'' + id + '\',' + i + ')">🗑删除</span></div>'; }).join('') : '') + '<div style="margin-top:4px;"><span style="cursor:pointer;color:var(--accent);font-size:12px;" onclick="addMeaning(\'' + id + '\')">➕ 添加情感锚定</span></div></div>' +
-        (meta.media && meta.media.length ? '<div class="field" style="grid-column:1/-1;"><label>🖼 media</label><div style="display:flex;flex-wrap:wrap;gap:12px;">' + meta.media.map(function(m, i) {
-          var path = m.path || m;
-          var title = m.title || ('图片 ' + (i+1));
-          var isStored = m.stored;
-          var desc = m.description || '';
-          var isUrl = typeof path === 'string' && (path.startsWith('http') || path.startsWith('data:'));
-          var imgUrl = isUrl ? path : (isStored ? (BASE + '/api/media/' + path) : path);
-          var descHtml = desc
-            ? '<div style="font-size:12px;color:var(--text);margin-top:4px;line-height:1.5;background:var(--bg);padding:6px 8px;border-radius:6px;">📝 ' + esc(desc) + ' <span style="cursor:pointer;color:var(--accent);font-size:11px;" onclick="event.stopPropagation();editMediaDesc(\'' + id + '\',' + i + ',\'' + esc(desc).replace(/'/g, "\\'") + '\')">✏️编辑</span> <span style="cursor:pointer;color:var(--negative);font-size:11px;" onclick="event.stopPropagation();deleteMedia(\'' + id + '\',' + i + ')">🗑删除</span></div>'
-            : '<div style="margin-top:4px;"><span style="cursor:pointer;color:var(--accent);font-size:12px;" onclick="event.stopPropagation();editMediaDesc(\'' + id + '\',' + i + ',\'\')">➕ 添加描述</span> <span style="cursor:pointer;color:var(--negative);font-size:12px;" onclick="event.stopPropagation();deleteMedia(\'' + id + '\',' + i + ')">🗑删除</span></div>';
-          if (isUrl || isStored) {
-            return '<div style="width:220px;"><img src="' + esc(imgUrl) + '" alt="' + esc(title) + '" style="width:100%;max-height:180px;object-fit:cover;border-radius:6px;border:1px solid var(--border);cursor:pointer;" onclick="openLightbox(\'' + esc(imgUrl) + '\')"><div style="font-size:11px;color:var(--text-dim);margin-top:4px;">' + esc(title) + (isStored ? ' ✅存储' : '') + '</div>' + descHtml + '</div>';
-          }
-          return '<div style="width:220px;font-size:13px;">' + esc(title) + ': ' + esc(path) + descHtml + '</div>';
-        }).join('') + '</div></div>' : '') +
-        '<div class="field"><label>创建</label>' + (meta.created || '—') + '</div>' +
-        '<div class="field"><label>最后活跃</label>' + (meta.last_active || '—') + '</div>' +
-      '</div>' +
-      '<div class="detail-content">' + esc(b.content) + '</div>' +
-      '<div class="detail-actions">' +
-        '<button onclick="openEdit(\'' + id + '\')">✏️ 编辑</button>' +
-        '<button onclick="uploadMedia(\'' + id + '\')">🖼 上传图片</button>' +
-        '<button class="btn-delete" onclick="deleteBucket(\'' + id + '\')">🗑 删除</button>' +
-      '</div>';
-  } catch (e) {
-    content.innerHTML = '<div class="loading">加载失败: ' + e.message + '</div>';
-  }
-}
-
-async function uploadMedia(bucketId) {
-  var input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'image/*';
-  input.multiple = true;
-  input.onchange = async function() {
-    var files = Array.from(input.files);
-    if (!files.length) return;
-    if (files.length > 5) { alert('一次最多上传5张'); return; }
-    var mediaItems = [];
-    for (var f of files) {
-      if (f.size > 25 * 1024 * 1024) { alert(f.name + ' 超过25MB限制'); return; }
-      var base64 = await new Promise(function(resolve) {
-        var reader = new FileReader();
-        reader.onload = function() { resolve(reader.result.split(',')[1]); };
-        reader.readAsDataURL(f);
-      });
-      mediaItems.push({ data_base64: base64, title: f.name, type: f.type });
-    }
-    try {
-      var res = await authFetch(BASE + '/api/bucket/' + bucketId + '/media', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ media: mediaItems })
-      });
-      var data = await res.json();
-      if (res.ok) {
-        alert('上传成功！' + mediaItems.length + ' 张图片已存储');
-        showDetail(bucketId);
-      } else {
-        alert('上传失败: ' + (data.error || '未知错误'));
-      }
-    } catch (e) {
-      alert('上传出错: ' + e.message);
-    }
-  };
-  input.click();
-}
-
-async function openEdit(id) {
-  try {
-    var res = await fetch(BASE + '/api/bucket/' + id);
-    var b = await res.json();
-    var meta = b.metadata || {};
-    document.getElementById('edit-id').value = id;
-    document.getElementById('edit-name').value = meta.name || '';
-    document.getElementById('edit-content').value = b.content || '';
-    document.getElementById('edit-tags').value = (meta.tags || []).join(', ');
-    document.getElementById('edit-domain').value = (meta.domain || []).join(', ');
-    document.getElementById('edit-event-type').value = meta.event_type || '';
-    document.getElementById('edit-source').value = meta.source || '';
-    document.getElementById('edit-importance').value = meta.importance || 5;
-    document.getElementById('edit-valence').value = meta.valence != null ? meta.valence : 0.5;
-    document.getElementById('edit-arousal').value = meta.arousal != null ? meta.arousal : 0.3;
-    document.getElementById('edit-modal').classList.add('open');
-  } catch (e) {
-    alert('加载失败: ' + e.message);
-  }
-}
-
-function closeEdit() {
-  document.getElementById('edit-modal').classList.remove('open');
-}
-
-async function saveBucket() {
-  var id = document.getElementById('edit-id').value;
-  var body = {
-    name: document.getElementById('edit-name').value,
-    content: document.getElementById('edit-content').value,
-    tags: document.getElementById('edit-tags').value,
-    domain: document.getElementById('edit-domain').value,
-    event_type: document.getElementById('edit-event-type').value,
-    source: document.getElementById('edit-source').value,
-    importance: parseInt(document.getElementById('edit-importance').value) || 5,
-    valence: parseFloat(document.getElementById('edit-valence').value),
-    arousal: parseFloat(document.getElementById('edit-arousal').value),
-  };
-  try {
-    var res = await fetch(BASE + '/api/bucket/' + id, {
-      method: 'PUT',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(body)
-    });
-    if (!res.ok) throw new Error('保存失败 (' + res.status + ')');
-    closeEdit();
-    closeDetail();
-    loadBuckets();
-  } catch (e) {
-    alert('保存失败: ' + e.message);
-  }
-}
-
-async function deleteBucket(id) {
-  if (!confirm('确定要删除这条记忆吗？此操作不可撤销。')) return;
-  try {
-    var res = await fetch(BASE + '/api/bucket/' + id, { method: 'DELETE' });
-    if (!res.ok) throw new Error('删除失败 (' + res.status + ')');
-    closeDetail();
-    loadBuckets();
-  } catch (e) {
-    alert('删除失败: ' + e.message);
-  }
-}
-
-function closeDetail() {
-  document.getElementById('detail-panel').classList.remove('open');
-}
-
-function openCreate() {
-  document.getElementById('create-name').value = '';
-  document.getElementById('create-content').value = '';
-  document.getElementById('create-tags').value = '';
-  document.getElementById('create-domain').value = '';
-  document.getElementById('create-event-type').value = '';
-  document.getElementById('create-source').value = '';
-  document.getElementById('create-importance').value = 5;
-  document.getElementById('create-valence').value = '';
-  document.getElementById('create-arousal').value = '';
-  document.getElementById('create-modal').classList.add('open');
-}
-
-function closeCreate() {
-  document.getElementById('create-modal').classList.remove('open');
-}
-
-async function createBucket() {
-  var content = document.getElementById('create-content').value.trim();
-  if (!content) { alert('请输入记忆内容'); return; }
-  var body = {
-    name: document.getElementById('create-name').value.trim(),
-    content: content,
-    tags: document.getElementById('create-tags').value,
-    domain: document.getElementById('create-domain').value,
-    event_type: document.getElementById('create-event-type').value,
-    source: document.getElementById('create-source').value,
-    importance: parseInt(document.getElementById('create-importance').value) || 5,
-    valence: document.getElementById('create-valence').value !== '' ? parseFloat(document.getElementById('create-valence').value) : -1,
-    arousal: document.getElementById('create-arousal').value !== '' ? parseFloat(document.getElementById('create-arousal').value) : -1,
-  };
-  try {
-    var res = await fetch(BASE + '/api/buckets', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(body)
-    });
-    if (!res.ok) throw new Error('新增失败 (' + res.status + ')');
-    closeCreate();
-    loadBuckets();
-  } catch (e) {
-    alert('新增失败: ' + e.message);
-  }
-}
-
-var networkLoaded = false;
-function loadNetwork() {
-  var container = document.getElementById('network-3d');
-  if (!allBuckets.length) {
-    container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#7ec8e3;font-size:14px;background:#080820;">没有记忆桶</div>';
-    return;
-  }
-
-  // Collect stats from allBuckets (already loaded, no extra API call)
-  var typeCount = { dynamic: 0, permanent: 0, feel: 0, archived: 0 };
-  var domainCount = {};
-  var monthCount = {};
-  allBuckets.forEach(function(b) {
-    var t = b.type || 'dynamic';
-    if (b.pinned) t = 'permanent';
-    typeCount[t] = (typeCount[t] || 0) + 1;
-    (b.domain || []).forEach(function(d) { domainCount[d] = (domainCount[d] || 0) + 1; });
-    var m = (b.created || '').substring(0, 7);
-    if (m) monthCount[m] = (monthCount[m] || 0) + 1;
-  });
-
-  var typeColors = { dynamic: '#4fc3f7', permanent: '#ffd54f', feel: '#ef9a9a', archived: '#90a4ae' };
-  var typeLabels = { dynamic: '💭 动态', permanent: '📌 钉选', feel: '🫧 感受', archived: '📦 归档' };
-
-  // Sort domains by count
-  var domainsSorted = Object.entries(domainCount).sort(function(a, b) { return b[1] - a[1]; }).slice(0, 12);
-  var domainMax = domainsSorted.length ? domainsSorted[0][1] : 1;
-
-  // Sort months chronologically
-  var monthsSorted = Object.entries(monthCount).sort(function(a, b) { return a[0].localeCompare(b[0]); });
-  var monthMax = monthsSorted.length ? Math.max.apply(null, monthsSorted.map(function(m) { return m[1]; })) : 1;
-
-  var domainColors = ['#4fc3f7','#ffd54f','#ef9a9a','#81c784','#ce93d8','#ffb74d','#4dd0e1','#a1887f','#90a4ae','#e6ee9c','#80cbc4','#f48fb1'];
-
-  var html = '<div style="padding:24px;background:#080820;border-radius:12px;min-height:100%;color:#ccc;font-size:13px;">';
-
-  // Type distribution
-  html += '<div style="margin-bottom:32px;"><div style="font-size:15px;font-weight:600;color:#7ec8e3;margin-bottom:14px;">📊 类型分布</div>';
-  html += '<div style="display:flex;gap:16px;flex-wrap:wrap;">';
-  Object.keys(typeCount).forEach(function(t) {
-    var c = typeCount[t];
-    html += '<div style="background:rgba(255,255,255,0.05);border-radius:10px;padding:16px 20px;flex:1;min-width:120px;text-align:center;">' +
-      '<div style="font-size:28px;font-weight:700;color:' + (typeColors[t]||'#ccc') + ';">' + c + '</div>' +
-      '<div style="font-size:12px;color:#999;margin-top:4px;">' + (typeLabels[t]||t) + '</div></div>';
-  });
-  html += '</div></div>';
-
-  // Domain bar chart
-  html += '<div style="margin-bottom:32px;"><div style="font-size:15px;font-weight:600;color:#7ec8e3;margin-bottom:14px;">🏷️ 主题分布</div>';
-  domainsSorted.forEach(function(d, i) {
-    var pct = Math.round(d[1] / domainMax * 100);
-    var color = domainColors[i % domainColors.length];
-    html += '<div style="display:flex;align-items:center;margin-bottom:6px;">' +
-      '<div style="width:60px;text-align:right;padding-right:10px;color:#aaa;font-size:12px;">' + d[0] + '</div>' +
-      '<div style="flex:1;height:22px;background:rgba(255,255,255,0.05);border-radius:6px;overflow:hidden;">' +
-        '<div style="width:' + pct + '%;height:100%;background:' + color + ';border-radius:6px;transition:width 0.3s;"></div>' +
-      '</div>' +
-      '<div style="width:36px;text-align:right;padding-left:8px;color:#aaa;font-size:12px;">' + d[1] + '</div>' +
-    '</div>';
-  });
-  html += '</div>';
-
-  // Monthly timeline bar chart
-  html += '<div><div style="font-size:15px;font-weight:600;color:#7ec8e3;margin-bottom:14px;">📅 月度记忆量</div>';
-  html += '<div style="display:flex;align-items:flex-end;gap:4px;height:140px;">';
-  monthsSorted.forEach(function(m) {
-    var pct = Math.round(m[1] / monthMax * 100);
-    var label = m[0].split('-')[1] ? parseInt(m[0].split('-')[1]) + '月' : m[0];
-    var year = m[0].split('-')[0];
-    html += '<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;">' +
-      '<div style="font-size:10px;color:#7ec8e3;margin-bottom:3px;">' + m[1] + '</div>' +
-      '<div style="width:100%;max-width:40px;height:' + pct + '%;background:linear-gradient(to top,#1a5276,#4fc3f7);border-radius:4px 4px 0 0;min-height:4px;"></div>' +
-      '<div style="font-size:9px;color:#666;margin-top:4px;white-space:nowrap;">' + label + '</div>' +
-    '</div>';
-  });
-  html += '</div></div>';
-
-  html += '</div>';
-  container.innerHTML = html;
-  networkLoaded = true;
-}
-
-function esc(s) {
-  if (!s) return '';
-  var d = document.createElement('div');
-  d.textContent = s;
-  return d.innerHTML;
-}
-
-function formatTimeAgo(iso) {
-  if (!iso) return '—';
-  var d = new Date(iso);
-  var now = new Date();
-  var hours = Math.floor((now - d) / 3600000);
-  if (hours < 1) return '刚刚';
-  if (hours < 24) return hours + 'h前';
-  var days = Math.floor(hours / 24);
-  if (days < 30) return days + 'd前';
-  return Math.floor(days/30) + 'mo前';
-}
-
-document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') closeDetail();
-  if (e.key === '/' && !e.ctrlKey && !e.metaKey) {
-    e.preventDefault();
-    document.getElementById('search-input').focus();
-  }
-});
-
-async function runBreathDebug() {
-  var query = document.getElementById('breath-query').value.trim();
-  var valence = document.getElementById('breath-valence').value;
-  var arousal = document.getElementById('breath-arousal').value;
-  var results = document.getElementById('breath-results');
-  var info = document.getElementById('breath-info');
-
-  results.innerHTML = '<div class="loading">计算中…</div>';
-
-  var url = BASE + '/api/breath-debug?q=' + encodeURIComponent(query);
-  if (valence) url += '&valence=' + valence;
-  if (arousal) url += '&arousal=' + arousal;
-
-  try {
-    var res = await fetch(url);
-    var data = await res.json();
-
-    document.getElementById('fs-input').classList.add('active');
-    document.getElementById('fs-cand-n').textContent = data.total_candidates + ' 桶';
-    document.getElementById('fs-candidates').classList.add('active');
-    document.getElementById('fs-scoring').classList.add('active');
-    document.getElementById('fs-thresh-n').textContent = '≥' + data.threshold + ' → ' + data.passed_count + ' 通过';
-    document.getElementById('fs-threshold').classList.add('active');
-    document.getElementById('fs-sort').classList.add('active');
-
-    var w = data.weights;
-    info.style.display = '';
-    info.innerHTML =
-      '<strong>权重配置</strong>&nbsp;' +
-      'topic=<code>' + w.topic + '</code> emotion=<code>' + w.emotion + '</code> ' +
-      'time=<code>' + w.time + '</code> importance=<code>' + w.importance + '</code>' +
-      ' &nbsp;|&nbsp; 阈值=<code>' + data.threshold + '</code>' +
-      ' &nbsp;|&nbsp; 候选=<code>' + data.total_candidates + '</code> 桶' +
-      ' → 通过=<code>' + data.passed_count + '</code> 桶' +
-      (query ? '' : ' &nbsp;|&nbsp; <em>未输入 query，topic 分数全为 0</em>');
-
-    if (!data.results.length) {
-      results.innerHTML = '<div class="loading">无结果</div>';
-      return;
-    }
-
-    var barColors = {
-      topic: '#2F4F4F',
-      emotion: '#8B6A6A',
-      time: '#9A7B4F',
-      importance: '#4A7C59',
-    };
-
-    results.innerHTML = data.results.map(function(r, i) {
-      var s = r.scores;
-      var passed = r.passed_threshold;
-      var icon = r.pinned ? '📌' : r.resolved ? '💤' : r.type === 'feel' ? '🫧' : '💭';
-      var bars = Object.entries(s).map(function(entry) {
-        var key = entry[0], val = entry[1];
-        var pct = Math.round(val * 100);
-        var wt = r.weights[key];
-        return '<div class="score-bar-group">' +
-          '<div class="score-bar-label"><span>' + key + '×' + wt + '</span><span>' + val.toFixed(2) + '</span></div>' +
-          '<div class="score-bar-track">' +
-            '<div class="score-bar-fill" style="width:' + pct + '%;background:' + barColors[key] + '"></div>' +
-          '</div>' +
-        '</div>';
-      }).join('');
-
-      return '<div class="score-row" title="' + esc(r.name) + '">' +
-        '<span class="rank">' + (i < 9 ? '0' : '') + (i + 1) + '</span>' +
-        '<span class="name">' + icon + ' ' + esc(r.name) + '</span>' +
-        '<div class="score-bars">' + bars + '</div>' +
-        '<span class="score-final ' + (passed ? 'score-pass' : 'score-fail') + '">' + r.normalized.toFixed(1) + (r.resolved ? '<small>×0.3</small>' : '') + '</span>' +
-      '</div>';
-    }).join('');
-  } catch (e) {
-    results.innerHTML = '<div class="loading">请求失败: ' + e.message + '</div>';
-  }
-}
-
-document.getElementById('breath-query').addEventListener('keydown', function(e) {
-  if (e.key === 'Enter') runBreathDebug();
-});
-
-async function loadConfig() {
-  try {
-    var res = await authFetch(BASE + '/api/config');
-    var cfg = await res.json();
-    document.getElementById('cfg-dehy-model').value = cfg.dehydration.model || '';
-    document.getElementById('cfg-dehy-url').value = cfg.dehydration.base_url || '';
-    document.getElementById('cfg-dehy-key').placeholder = '当前: ' + (cfg.dehydration.api_key_masked || '未设置');
-    document.getElementById('cfg-dehy-key').value = '';
-    document.getElementById('cfg-dehy-maxtokens').value = cfg.dehydration.max_tokens || 1024;
-    document.getElementById('cfg-dehy-temp').value = cfg.dehydration.temperature || 0.1;
-    document.getElementById('cfg-emb-enabled').value = cfg.embedding.enabled ? 'true' : 'false';
-    document.getElementById('cfg-emb-model').value = cfg.embedding.model || '';
-    document.getElementById('cfg-merge').value = cfg.merge_threshold || 75;
-    document.getElementById('config-readonly').innerHTML =
-      'Transport: <strong>' + cfg.transport + '</strong><br>Buckets dir: <strong>' + cfg.buckets_dir + '</strong>';
-  } catch (e) {
-    document.getElementById('config-status').innerHTML =
-      '<span style="color:var(--negative)">加载失败: ' + e.message + '</span>';
-  }
-}
-
-async function saveConfig(persist) {
-  var body = {
-    dehydration: {
-      model: document.getElementById('cfg-dehy-model').value,
-      base_url: document.getElementById('cfg-dehy-url').value,
-      max_tokens: parseInt(document.getElementById('cfg-dehy-maxtokens').value) || 1024,
-      temperature: parseFloat(document.getElementById('cfg-dehy-temp').value) || 0.1,
-    },
-    embedding: {
-      enabled: document.getElementById('cfg-emb-enabled').value === 'true',
-      model: document.getElementById('cfg-emb-model').value,
-    },
-    merge_threshold: parseInt(document.getElementById('cfg-merge').value) || 75,
-    persist: persist,
-  };
-  var keyVal = document.getElementById('cfg-dehy-key').value;
-  if (keyVal) body.dehydration.api_key = keyVal;
-
-  var status = document.getElementById('config-status');
-  try {
-    var res = await authFetch(BASE + '/api/config', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(body),
-    });
-    var result = await res.json();
-    if (result.ok) {
-      status.innerHTML = '<span style="color:var(--positive)">✓ 已更新: ' + result.updated.join(', ') + '</span>';
-      loadConfig();
-    } else {
-      status.innerHTML = '<span style="color:var(--negative)">✗ ' + (result.error || '未知错误') + '</span>';
-    }
-  } catch (e) {
-    status.innerHTML = '<span style="color:var(--negative)">✗ 请求失败: ' + e.message + '</span>';
-  }
-}
-
-checkAuth().then(() => loadBuckets());
-
-// --- Import functions ---
-const uploadZone = document.getElementById('import-upload-zone');
-const fileInput = document.getElementById('import-file-input');
-
-uploadZone.addEventListener('click', () => fileInput.click());
-uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.style.borderColor = 'var(--accent)'; });
-uploadZone.addEventListener('dragleave', () => { uploadZone.style.borderColor = 'var(--border)'; });
-uploadZone.addEventListener('drop', e => {
-  e.preventDefault();
-  uploadZone.style.borderColor = 'var(--border)';
-  if (e.dataTransfer.files.length) startImport(e.dataTransfer.files[0]);
-});
-fileInput.addEventListener('change', () => { if (fileInput.files.length) startImport(fileInput.files[0]); });
-
-async function startImport(file) {
-  const preserveRaw = document.getElementById('import-preserve-raw').checked;
-  const fd = new FormData();
-  fd.append('file', file);
-  try {
-    const res = await fetch(BASE + '/api/import/upload?preserve_raw=' + (preserveRaw ? '1' : '0'), { method: 'POST', body: fd });
-    const data = await res.json();
-    if (data.error) { alert('导入失败: ' + data.error); return; }
-    document.getElementById('import-progress').style.display = '';
-    document.getElementById('import-pause-btn').style.display = '';
-    pollImportStatus();
-  } catch (e) { alert('上传失败: ' + e.message); }
-}
-
-let importPollTimer;
-async function pollImportStatus() {
-  clearInterval(importPollTimer);
-  try {
-    const res = await fetch(BASE + '/api/import/status');
-    const s = await res.json();
-    updateImportUI(s);
-    if (s.status === 'running') {
-      importPollTimer = setInterval(async () => {
-        try {
-          const r2 = await fetch(BASE + '/api/import/status');
-          updateImportUI(await r2.json());
-        } catch(e) {}
-      }, 2000);
-    }
-  } catch(e) {}
-}
-
-function updateImportUI(s) {
-  const prog = document.getElementById('import-progress');
-  if (s.status === 'idle') { prog.style.display = 'none'; return; }
-  prog.style.display = '';
-  const pct = s.total_chunks ? Math.round(s.processed / s.total_chunks * 100) : 0;
-  document.getElementById('import-progress-bar').style.width = pct + '%';
-  document.getElementById('import-progress-text').textContent = s.processed + '/' + s.total_chunks;
-  document.getElementById('import-api-calls').textContent = s.api_calls;
-  document.getElementById('import-created').textContent = s.memories_created;
-  document.getElementById('import-merged').textContent = s.memories_merged;
-  document.getElementById('import-raw').textContent = s.memories_raw;
-  const statusMap = { running: '⏳ 导入中…', paused: '⏸ 已暂停', completed: '✅ 完成', error: '❌ 出错' };
-  document.getElementById('import-status-text').textContent = statusMap[s.status] || s.status;
-  document.getElementById('import-pause-btn').style.display = s.status === 'running' ? '' : 'none';
-  if (s.status !== 'running') clearInterval(importPollTimer);
-  if (s.status === 'completed') loadImportResults();
-  const errDiv = document.getElementById('import-errors');
-  if (s.errors && s.errors.length) {
-    errDiv.style.display = '';
-    errDiv.textContent = s.errors.join('\n');
-  } else { errDiv.style.display = 'none'; }
-}
-
-async function pauseImport() {
-  try { await fetch(BASE + '/api/import/pause', { method: 'POST' }); } catch(e) {}
-}
-
-async function loadImportResults() {
-  const container = document.getElementById('import-results-list');
-  container.innerHTML = '<div class="loading">加载中…</div>';
-  try {
-    const res = await fetch(BASE + '/api/import/results?limit=30');
-    const data = await res.json();
-    if (!data.buckets || !data.buckets.length) {
-      container.innerHTML = '<p style="color:var(--text-dim)">暂无记忆桶</p>';
-      return;
-    }
-    container.innerHTML = data.buckets.map(b => `
-      <div id="ir-${b.id}" style="background:var(--surface);border-radius:12px;padding:14px;margin:8px 0;">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <b>${b.name || b.id}</b>
-          <span style="font-size:11px;color:var(--text-dim);">${b.type} | ${(b.domain||[]).join(',')} | imp:${b.importance}</span>
-        </div>
-        <p style="font-size:13px;margin:6px 0;white-space:pre-wrap;">${b.content}</p>
-        <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;">${(b.tags||[]).map(t=>'#'+t).join(' ')}</div>
-        <div style="display:flex;gap:8px;">
-          <button onclick="reviewAction('${b.id}','pin')" title="固定为永久记忆">📌 固定</button>
-          <button onclick="reviewAction('${b.id}','important')" title="标为重要">⭐ 重要</button>
-          <button onclick="reviewAction('${b.id}','noise')" title="标为噪声并resolve">🗑 噪声</button>
-          <button onclick="if(confirm('确定删除？'))reviewAction('${b.id}','delete')" title="彻底删除" style="color:var(--negative);">✕ 删除</button>
-        </div>
-      </div>
-    `).join('');
-  } catch(e) { container.innerHTML = '<p style="color:var(--negative)">加载失败: ' + e.message + '</p>'; }
-}
-
-async function detectPatterns() {
-  const container = document.getElementById('import-patterns');
-  container.innerHTML = '<div class="loading">检测中…</div>';
-  try {
-    const res = await fetch(BASE + '/api/import/patterns');
-    const data = await res.json();
-    if (!data.patterns || !data.patterns.length) { container.innerHTML = '<p style="color:var(--text-dim)">未检测到高频模式</p>'; return; }
-    container.innerHTML = data.patterns.map(p => `
-      <div style="background:var(--surface);border-radius:12px;padding:14px;margin:8px 0;">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <b>${p.pattern_name}</b>
-          <span style="font-size:12px;color:var(--text-dim);">出现 ${p.count} 次</span>
-        </div>
-        <p style="font-size:13px;margin:6px 0;">${p.pattern_content}</p>
-        <div style="display:flex;gap:8px;">
-          <button onclick="reviewAction('${p.bucket_ids[0]}','pin')">📌 固定</button>
-          <button onclick="reviewAction('${p.bucket_ids[0]}','important')">⭐ 重要</button>
-          <button onclick="batchReview('${JSON.stringify(p.bucket_ids).replace(/'/g, "\\'").replace(/"/g, '&quot;')}','noise')">🗑 噪声</button>
-        </div>
-      </div>
-    `).join('');
-  } catch(e) { container.innerHTML = '<p style="color:var(--negative)">检测失败: ' + e.message + '</p>'; }
-}
-
-async function reviewAction(bid, action) {
-  try {
-    await fetch(BASE + '/api/import/review', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ decisions: [{ bucket_id: bid, action }] })
-    });
-    // Remove card from UI
-    const card = document.getElementById('ir-' + bid);
-    if (card) card.style.display = 'none';
-  } catch(e) {}
-}
-
-async function batchReview(idsJson, action) {
-  try {
-    const ids = JSON.parse(idsJson);
-    await fetch(BASE + '/api/import/review', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ decisions: ids.map(id => ({ bucket_id: id, action })) })
-    });
-    detectPatterns();
-  } catch(e) {}
-}
-
-// ============================================================
-// 📤 Export — 记忆导出功能
-// ============================================================
-let _exportResult = '';
-
-async function doExportBreath() {
-  const query = document.getElementById('export-query').value.trim();
-  const filter = document.getElementById('export-filter').value;
-  const count = document.getElementById('export-count').value;
-  const statusEl = document.getElementById('export-status');
-  const resultEl = document.getElementById('export-result');
-
-  statusEl.textContent = '🫁 正在呼吸…';
-  resultEl.style.display = 'none';
-  document.getElementById('export-copy-btn').style.display = 'none';
-  document.getElementById('export-dl-btn').style.display = 'none';
-
-  let url = BASE + '/api/v2/breath';
-  const params = new URLSearchParams();
-  if (query) params.set('query', query);
-  params.set('max_results', count);
-  params.set('max_tokens', '8000');
-  if (filter === 'pinned') params.set('importance_min', '9');
-  if (filter === 'important') params.set('importance_min', '8');
-
-  try {
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query: query,
-        max_results: parseInt(count),
-        max_tokens: 8000,
-        importance_min: filter === 'pinned' ? 9 : (filter === 'important' ? 8 : -1),
-      })
-    });
-    const data = await resp.json();
-    if (!data.ok) throw new Error(data.error || 'Unknown error');
-
-    _exportResult = data.result;
-    resultEl.textContent = _exportResult;
-    resultEl.style.display = 'block';
-    document.getElementById('export-copy-btn').style.display = '';
-    document.getElementById('export-dl-btn').style.display = '';
-    statusEl.textContent = '✅ 呼吸完成';
-  } catch (e) {
-    statusEl.textContent = '❌ ' + e.message;
-    if (e.message.includes('401') || e.message.includes('Unauthorized')) {
-      statusEl.textContent = '❌ 需要先设置 OMBRE_API_KEY 环境变量，或确认已登录';
-    }
-  }
-}
-
-function doExportCopy() {
-  if (!_exportResult) return;
-  navigator.clipboard.writeText(_exportResult).then(() => {
-    const btn = document.getElementById('export-copy-btn');
-    const orig = btn.textContent;
-    btn.textContent = '✅ 已复制！';
-    setTimeout(() => btn.textContent = orig, 2000);
-  }).catch(() => {
-    // Fallback for older browsers
-    const ta = document.createElement('textarea');
-    ta.value = _exportResult;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    document.body.removeChild(ta);
-    const btn = document.getElementById('export-copy-btn');
-    btn.textContent = '✅ 已复制！';
-    setTimeout(() => btn.textContent = '📋 复制到剪贴板', 2000);
-  });
-}
-
-function doExportDownload() {
-  if (!_exportResult) return;
-  const blob = new Blob([_exportResult], { type: 'text/plain;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  const now = new Date().toISOString().slice(0, 10);
-  a.download = `蜜云阁记忆_${now}.txt`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-</script>
-</body>
-</html>
+# ============================================================
+# Module: Memory Bucket Manager (bucket_manager.py)
+# 模块：记忆桶管理器
+#
+# CRUD operations, multi-dimensional index search, activation updates
+# for memory buckets.
+# 记忆桶的增删改查、多维索引搜索、激活更新。
+#
+# Core design:
+# 核心逻辑：
+#   - Each bucket = one Markdown file (YAML frontmatter + body)
+#     每个记忆桶 = 一个 Markdown 文件
+#   - Storage by type: permanent / dynamic / archive
+#     存储按类型分目录
+#   - Multi-dimensional soft index: domain + valence/arousal + fuzzy text
+#     多维软索引：主题域 + 情感坐标 + 文本模糊匹配
+#   - Search strategy: domain pre-filter → weighted multi-dim ranking
+#     搜索策略：主题域预筛 → 多维加权精排
+#   - Emotion coordinates based on Russell circumplex model:
+#     情感坐标基于环形情感模型（Russell circumplex）：
+#       valence (0~1): 0=negative → 1=positive
+#       arousal (0~1): 0=calm → 1=excited
+#
+# Depended on by: server.py, decay_engine.py
+# 被谁依赖：server.py, decay_engine.py
+# ============================================================
+
+import os
+import math
+import logging
+import shutil
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
+
+import frontmatter
+from rapidfuzz import fuzz
+
+from utils import generate_bucket_id, sanitize_name, safe_path, now_iso
+
+logger = logging.getLogger("ombre_brain.bucket")
+
+
+class BucketManager:
+    """
+    Memory bucket manager — entry point for all bucket CRUD operations.
+    Buckets are stored as Markdown files with YAML frontmatter for metadata
+    and body for content. Natively compatible with Obsidian browsing/editing.
+    记忆桶管理器 —— 所有桶的 CRUD 操作入口。
+    桶以 Markdown 文件存储，YAML frontmatter 存元数据，正文存内容。
+    天然兼容 Obsidian 直接浏览和编辑。
+    """
+
+    def __init__(self, config: dict, embedding_engine=None):
+        # --- Read storage paths from config / 从配置中读取存储路径 ---
+        self.base_dir = config["buckets_dir"]
+        self.permanent_dir = os.path.join(self.base_dir, "permanent")
+        self.dynamic_dir = os.path.join(self.base_dir, "dynamic")
+        self.archive_dir = os.path.join(self.base_dir, "archive")
+        self.feel_dir = os.path.join(self.base_dir, "feel")
+        self.media_dir = os.path.join(self.base_dir, "_media")
+        os.makedirs(self.media_dir, exist_ok=True)
+        # --- Media persistent storage ---
+        try:
+            from media_store import MediaStore
+            self.media_store = MediaStore(
+                self.base_dir, self.media_dir,
+                max_bytes=int(config.get("media_max_bytes", 25 * 1024 * 1024)),
+            )
+        except ImportError:
+            self.media_store = None
+        self.fuzzy_threshold = config.get("matching", {}).get("fuzzy_threshold", 50)
+        self.max_results = config.get("matching", {}).get("max_results", 5)
+
+        # --- Wikilink config / 双链配置 ---
+        wikilink_cfg = config.get("wikilink", {})
+        self.wikilink_enabled = wikilink_cfg.get("enabled", True)
+        self.wikilink_use_tags = wikilink_cfg.get("use_tags", False)
+        self.wikilink_use_domain = wikilink_cfg.get("use_domain", True)
+        self.wikilink_use_auto_keywords = wikilink_cfg.get("use_auto_keywords", True)
+        self.wikilink_auto_top_k = wikilink_cfg.get("auto_top_k", 8)
+        self.wikilink_min_len = wikilink_cfg.get("min_keyword_len", 2)
+        self.wikilink_exclude_keywords = set(wikilink_cfg.get("exclude_keywords", []))
+        self.wikilink_stopwords = {
+            "的", "了", "在", "是", "我", "有", "和", "就", "不", "人",
+            "都", "一个", "上", "也", "很", "到", "说", "要", "去",
+            "你", "会", "着", "没有", "看", "好", "自己", "这", "他", "她",
+            "我们", "你们", "他们", "然后", "今天", "昨天", "明天", "一下",
+            "the", "and", "for", "are", "but", "not", "you", "all", "can",
+            "had", "her", "was", "one", "our", "out", "has", "have", "with",
+            "this", "that", "from", "they", "been", "said", "will", "each",
+        }
+        self.wikilink_stopwords |= {w.lower() for w in self.wikilink_exclude_keywords}
+
+        # --- Search scoring weights / 检索权重配置 ---
+        scoring = config.get("scoring_weights", {})
+        self.w_topic = scoring.get("topic_relevance", 4.0)
+        self.w_emotion = scoring.get("emotion_resonance", 2.0)
+        self.w_time = scoring.get("time_proximity", 1.5)
+        self.w_importance = scoring.get("importance", 1.0)
+        self.content_weight = scoring.get("content_weight", 1.0)  # body×1, per spec
+
+        # --- Optional embedding engine for pre-filtering / 可选 embedding 引擎，用于预筛候选集 ---
+        self.embedding_engine = embedding_engine
+
+    # ---------------------------------------------------------
+    # Create a new bucket
+    # 创建新桶
+    # Write content and metadata into a .md file
+    # 将内容和元数据写入一个 .md 文件
+    # ---------------------------------------------------------
+    async def create(
+        self,
+        content: str,
+        tags: list[str] = None,
+        importance: int = 5,
+        domain: list[str] = None,
+        valence: float = 0.5,
+        arousal: float = 0.3,
+        bucket_type: str = "dynamic",
+        name: str = None,
+        pinned: bool = False,
+        protected: bool = False,
+        source: str = "",
+        event_type: str = "",
+        meaning: str = "",
+        media: list = None,
+    ) -> str:
+        """
+        Create a new memory bucket, return bucket ID.
+        创建一个新的记忆桶，返回桶 ID。
+
+        pinned/protected=True: bucket won't be merged, decayed, or have importance changed.
+        Importance is locked to 10 for pinned/protected buckets.
+        pinned/protected 桶不参与合并与衰减，importance 强制锁定为 10。
+        """
+        bucket_id = generate_bucket_id()
+        bucket_name = sanitize_name(name) if name else bucket_id
+        # feel buckets are allowed to have empty domain; others default to ["未分类"]
+        if bucket_type == "feel":
+            domain = domain if domain is not None else []
+        else:
+            domain = domain or ["未分类"]
+        tags = tags or []
+        linked_content = content  # wikilink injection disabled; LLM adds [[]] via prompt
+
+        # --- Pinned/protected buckets: lock importance to 10 ---
+        # --- 钉选/保护桶：importance 强制锁定为 10 ---
+        if pinned or protected:
+            importance = 10
+
+        # --- Build YAML frontmatter metadata / 构建元数据 ---
+        metadata = {
+            "id": bucket_id,
+            "name": bucket_name,
+            "tags": tags,
+            "domain": domain,
+            "valence": max(0.0, min(1.0, valence)),
+            "arousal": max(0.0, min(1.0, arousal)),
+            "importance": max(1, min(10, importance)),
+            "type": bucket_type,
+            "created": now_iso(),
+            "last_active": now_iso(),
+            "activation_count": 0,
+        }
+        if source:
+            metadata["source"] = source
+        if event_type:
+            metadata["event_type"] = event_type
+        if pinned:
+            metadata["pinned"] = True
+        if protected:
+            metadata["protected"] = True
+        if meaning and meaning.strip():
+            metadata["meaning"] = [meaning.strip()]
+        if media:
+            if self.media_store:
+                try:
+                    persisted = [self.media_store._persist_one(bucket_id, item) for item in (media if isinstance(media, list) else [media])]
+                    metadata["media"] = persisted[:20]
+                except Exception as e:
+                    logger.warning(f"Media persistence failed, saving references only: {e}")
+                    metadata["media"] = media[:20]
+            else:
+                metadata["media"] = media[:20]
+
+        # --- Assemble Markdown file (frontmatter + body) ---
+        # --- 组装 Markdown 文件 ---
+        post = frontmatter.Post(linked_content, **metadata)
+
+        # --- Choose directory by type + primary domain ---
+        # --- 按类型 + 主题域选择存储目录 ---
+        if bucket_type == "permanent" or pinned:
+            type_dir = self.permanent_dir
+            if pinned and bucket_type != "permanent":
+                metadata["type"] = "permanent"
+        elif bucket_type == "feel":
+            type_dir = self.feel_dir
+        else:
+            type_dir = self.dynamic_dir
+        if bucket_type == "feel":
+            primary_domain = "沉淀物"  # feel subfolder name
+        else:
+            primary_domain = sanitize_name(domain[0]) if domain else "未分类"
+        target_dir = os.path.join(type_dir, primary_domain)
+        os.makedirs(target_dir, exist_ok=True)
+
+        # --- Filename: readable_name_bucketID.md (Obsidian friendly) ---
+        # --- 文件名：可读名称_桶ID.md ---
+        if bucket_name and bucket_name != bucket_id:
+            filename = f"{bucket_name}_{bucket_id}.md"
+        else:
+            filename = f"{bucket_id}.md"
+        file_path = safe_path(target_dir, filename)
+
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(frontmatter.dumps(post))
+        except OSError as e:
+            logger.error(f"Failed to write bucket file / 写入桶文件失败: {file_path}: {e}")
+            raise
+
+        logger.info(
+            f"Created bucket / 创建记忆桶: {bucket_id} ({bucket_name}) → {primary_domain}/"
+            + (" [PINNED]" if pinned else "") + (" [PROTECTED]" if protected else "")
+        )
+        return bucket_id
+
+    # ---------------------------------------------------------
+    # Read bucket content
+    # 读取桶内容
+    # Returns {"id", "metadata", "content", "path"} or None
+    # ---------------------------------------------------------
+    async def get(self, bucket_id: str) -> Optional[dict]:
+        """
+        Read a single bucket by ID.
+        根据 ID 读取单个桶。
+        """
+        if not bucket_id or not isinstance(bucket_id, str):
+            return None
+        file_path = self._find_bucket_file(bucket_id)
+        if not file_path:
+            return None
+        return self._load_bucket(file_path)
+
+    # ---------------------------------------------------------
+    # Move bucket between directories
+    # 在目录间移动桶文件
+    # ---------------------------------------------------------
+    def _move_bucket(self, file_path: str, target_type_dir: str, domain: list[str] = None) -> str:
+        """
+        Move a bucket file to a new type directory, preserving domain subfolder.
+        Returns new file path.
+        """
+        primary_domain = sanitize_name(domain[0]) if domain else "未分类"
+        target_dir = os.path.join(target_type_dir, primary_domain)
+        os.makedirs(target_dir, exist_ok=True)
+        filename = os.path.basename(file_path)
+        new_path = safe_path(target_dir, filename)
+        if os.path.normpath(file_path) != os.path.normpath(new_path):
+            os.rename(file_path, new_path)
+            logger.info(f"Moved bucket / 移动记忆桶: {filename} → {target_dir}/")
+        return new_path
+
+    # ---------------------------------------------------------
+    # Update bucket
+    # 更新桶
+    # Supports: content, tags, importance, valence, arousal, name, resolved
+    # ---------------------------------------------------------
+    async def update(self, bucket_id: str, **kwargs) -> bool:
+        """
+        Update bucket content or metadata fields.
+        更新桶的内容或元数据字段。
+        """
+        file_path = self._find_bucket_file(bucket_id)
+        if not file_path:
+            return False
+
+        try:
+            post = frontmatter.load(file_path)
+        except Exception as e:
+            logger.warning(f"Failed to load bucket for update / 加载桶失败: {file_path}: {e}")
+            return False
+
+        # --- Pinned/protected buckets: lock importance to 10, ignore importance changes ---
+        # --- 钉选/保护桶：importance 不可修改，强制保持 10 ---
+        is_pinned = post.get("pinned", False) or post.get("protected", False)
+        if is_pinned:
+            kwargs.pop("importance", None)  # silently ignore importance update
+
+        # --- Update only fields that were passed in / 只改传入的字段 ---
+        if "content" in kwargs:
+            post.content = kwargs["content"]  # wikilink injection disabled; LLM adds [[]] via prompt
+        if "tags" in kwargs:
+            post["tags"] = kwargs["tags"]
+        if "importance" in kwargs:
+            post["importance"] = max(1, min(10, int(kwargs["importance"])))
+        if "domain" in kwargs:
+            post["domain"] = kwargs["domain"]
+        if "valence" in kwargs:
+            post["valence"] = max(0.0, min(1.0, float(kwargs["valence"])))
+        if "arousal" in kwargs:
+            post["arousal"] = max(0.0, min(1.0, float(kwargs["arousal"])))
+        if "name" in kwargs:
+            post["name"] = sanitize_name(kwargs["name"])
+        if "resolved" in kwargs:
+            post["resolved"] = bool(kwargs["resolved"])
+        if "pinned" in kwargs:
+            post["pinned"] = bool(kwargs["pinned"])
+            if kwargs["pinned"]:
+                post["importance"] = 10  # pinned → lock importance to 10
+        if "digested" in kwargs:
+            post["digested"] = bool(kwargs["digested"])
+        if "anchor" in kwargs:
+            post["anchor"] = bool(kwargs["anchor"])
+            if kwargs["anchor"]:
+                # anchor 与 pinned 互斥
+                post.metadata.pop("pinned", None)
+        if "model_valence" in kwargs:
+            post["model_valence"] = max(0.0, min(1.0, float(kwargs["model_valence"])))
+        # --- Miss: meaning append (hold's emotional anchor) ---
+        if "meaning" in kwargs:
+            post["meaning"] = kwargs["meaning"]
+        if "meaning_append" in kwargs:
+            existing = post.get("meaning", [])
+            if not isinstance(existing, list):
+                existing = [existing] if existing else []
+            existing.append(str(kwargs["meaning_append"]).strip())
+            post["meaning"] = existing
+        if "media" in kwargs:
+            # Direct replacement (from dashboard edit/delete) — already persisted, skip media_store
+            post["media"] = kwargs["media"]
+        if "media_append" in kwargs:
+            existing_media = post.get("media", [])
+            if not isinstance(existing_media, list):
+                existing_media = []
+            if self.media_store:
+                try:
+                    new_items = kwargs["media_append"] if isinstance(kwargs["media_append"], list) else [kwargs["media_append"]]
+                    persisted = [self.media_store._persist_one(bucket_id, item) for item in new_items]
+                    existing_media.extend(persisted)
+                except Exception:
+                    existing_media.extend(kwargs["media_append"] if isinstance(kwargs["media_append"], list) else [kwargs["media_append"]])
+            else:
+                existing_media.extend(kwargs["media_append"] if isinstance(kwargs["media_append"], list) else [kwargs["media_append"]])
+            post["media"] = existing_media[:20]
+
+        # --- Auto-refresh activation time / 自动刷新激活时间 ---
+        post["last_active"] = now_iso()
+
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(frontmatter.dumps(post))
+        except OSError as e:
+            logger.error(f"Failed to write bucket update / 写入桶更新失败: {file_path}: {e}")
+            return False
+
+        # --- Auto-move: pinned → permanent/ ---
+        # --- 自动移动：钉选 → permanent/ ---
+        # NOTE: resolved buckets are NOT auto-archived here.
+        # They stay in dynamic/ and decay naturally until score < threshold.
+        # 注意：resolved 桶不在此自动归档，留在 dynamic/ 随衰减引擎自然归档。
+        domain = post.get("domain", ["未分类"])
+        if kwargs.get("pinned") and post.get("type") != "permanent":
+            post["type"] = "permanent"
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(frontmatter.dumps(post))
+            self._move_bucket(file_path, self.permanent_dir, domain)
+
+        logger.info(f"Updated bucket / 更新记忆桶: {bucket_id}")
+        return True
+
+    # ---------------------------------------------------------
+    # Wikilink injection — DISABLED
+    # 自动添加 Obsidian 双链 — 已禁用
+    # Now handled by LLM prompts (Gemini adds [[]] for proper nouns)
+    # 现在由 LLM prompt 处理（Gemini 对人名/地名/专有名词加 [[]]）
+    # ---------------------------------------------------------
+    # def _apply_wikilinks(self, content, tags, domain, name): ...
+    # def _collect_wikilink_keywords(self, content, tags, domain, name): ...
+    # def _normalize_keywords(self, keywords): ...
+    # def _extract_auto_keywords(self, content): ...
+
+    # ---------------------------------------------------------
+    # Delete bucket
+    # 删除桶
+    # ---------------------------------------------------------
+    async def delete(self, bucket_id: str) -> bool:
+        """
+        Delete a memory bucket file.
+        删除指定的记忆桶文件。
+        """
+        file_path = self._find_bucket_file(bucket_id)
+        if not file_path:
+            return False
+
+        try:
+            os.remove(file_path)
+        except OSError as e:
+            logger.error(f"Failed to delete bucket file / 删除桶文件失败: {file_path}: {e}")
+            return False
+
+        logger.info(f"Deleted bucket / 删除记忆桶: {bucket_id}")
+        return True
+
+    # ---------------------------------------------------------
+    # Partial content replacement (old_str → new_str)
+    # 局部内容替换（old_str → new_str）
+    # Atomically replaces one unique fragment in bucket body.
+    # 原子性地替换桶正文中唯一匹配的片段。
+    # ---------------------------------------------------------
+    async def update_content_fragment(
+        self, bucket_id: str, *, old_str: str, new_str: str, **kwargs
+    ) -> dict:
+        """
+        Replace one unique literal fragment in a bucket's body text.
+        old_str must appear exactly once; zero or multiple matches are rejected.
+        new_str may be empty (deletes the matched fragment).
+        Additional kwargs are applied as metadata updates alongside the patch.
+        局部替换桶正文中唯一匹配的片段。old_str 必须恰好出现一次。
+        """
+        old_text = str(old_str)
+        replacement = str(new_str)
+        if not old_text:
+            return {"ok": False, "error": "empty_old_str"}
+        if "content" in kwargs:
+            return {"ok": False, "error": "content_conflict"}
+
+        file_path = self._find_bucket_file(bucket_id)
+        if not file_path:
+            return {"ok": False, "error": "not_found"}
+        try:
+            post = frontmatter.load(file_path)
+        except Exception as exc:
+            logger.warning(f"Failed to load bucket for content patch {bucket_id}: {exc}")
+            return {"ok": False, "error": "read_failed"}
+
+        current_content = str(post.content or "")
+        first_match = current_content.find(old_text)
+        if first_match < 0:
+            return {"ok": False, "error": "old_str_not_found"}
+        second_match = current_content.find(old_text, first_match + 1)
+        if second_match >= 0:
+            return {"ok": False, "error": "old_str_ambiguous"}
+
+        updated_content = current_content.replace(old_text, replacement, 1)
+        if updated_content == current_content:
+            return {"ok": False, "error": "unchanged"}
+        if not updated_content.strip():
+            return {"ok": False, "error": "invalid_content",
+                    "message": "替换后正文不能为空；如需移除整个桶，请使用 delete。"}
+
+        kwargs["content"] = updated_content
+        success = await self.update(bucket_id, **kwargs)
+        return {"ok": success, "error": "" if success else "update_failed"}
+
+    # ---------------------------------------------------------
+    # Touch bucket (refresh activation time + increment count)
+    # 触碰桶（刷新激活时间 + 累加激活次数）
+    # Called on every recall hit; affects decay score.
+    # 每次检索命中时调用，影响衰减得分。
+    # ---------------------------------------------------------
+    async def touch(self, bucket_id: str) -> None:
+        """
+        Update a bucket's last activation time and count.
+        Also triggers time ripple: nearby memories get a slight activation boost.
+        更新桶的最后激活时间和激活次数。
+        同时触发时间涟漪：时间上相邻的记忆轻微唤醒。
+        """
+        file_path = self._find_bucket_file(bucket_id)
+        if not file_path:
+            return
+
+        try:
+            post = frontmatter.load(file_path)
+            post["last_active"] = now_iso()
+            post["activation_count"] = post.get("activation_count", 0) + 1
+
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(frontmatter.dumps(post))
+
+            # --- Time ripple: boost nearby memories within ±48h ---
+            # --- 时间涟漪：±48小时内的记忆轻微唤醒 ---
+            current_time = datetime.fromisoformat(str(post.get("created", post.get("last_active", ""))))
+            await self._time_ripple(bucket_id, current_time)
+        except Exception as e:
+            logger.warning(f"Failed to touch bucket / 触碰桶失败: {bucket_id}: {e}")
+
+    async def _time_ripple(self, source_id: str, reference_time: datetime, hours: float = 48.0) -> None:
+        """
+        Slightly boost activation_count of buckets created/activated near the reference time.
+        轻微提升时间相邻桶的激活次数（+0.3），不改 last_active 避免递归唤醒。
+        Max 5 buckets rippled per touch to bound I/O.
+        """
+        try:
+            all_buckets = await self.list_all(include_archive=False)
+        except Exception:
+            return
+
+        rippled = 0
+        max_ripple = 5
+        for bucket in all_buckets:
+            if rippled >= max_ripple:
+                break
+            if bucket["id"] == source_id:
+                continue
+            meta = bucket.get("metadata", {})
+            # Skip pinned/permanent/feel
+            if meta.get("pinned") or meta.get("protected") or meta.get("type") in ("permanent", "feel"):
+                continue
+
+            created_str = meta.get("created", meta.get("last_active", ""))
+            try:
+                created = datetime.fromisoformat(str(created_str))
+                delta_hours = abs((reference_time - created).total_seconds()) / 3600
+            except (ValueError, TypeError):
+                continue
+
+            if delta_hours <= hours:
+                # Boost activation_count by 0.3 (fractional), don't change last_active
+                file_path = self._find_bucket_file(bucket["id"])
+                if not file_path:
+                    continue
+                try:
+                    post = frontmatter.load(file_path)
+                    current_count = post.get("activation_count", 1)
+                    # Store as float for fractional increments; calculate_score handles it
+                    post["activation_count"] = round(current_count + 0.3, 1)
+                    with open(file_path, "w", encoding="utf-8") as f:
+                        f.write(frontmatter.dumps(post))
+                    rippled += 1
+                except Exception:
+                    continue
+
+    # ---------------------------------------------------------
+    # Multi-dimensional search (core feature)
+    # 多维搜索（核心功能）
+    #
+    # Strategy: domain pre-filter → weighted multi-dim ranking
+    # 策略：主题域预筛 → 多维加权精排
+    #
+    # Ranking formula:
+    #   total = topic(×w_topic) + emotion(×w_emotion)
+    #           + time(×w_time) + importance(×w_importance)
+    #
+    # Per-dimension scores (normalized to 0~1):
+    #   topic     = rapidfuzz weighted match (name/tags/domain/body)
+    #   emotion   = 1 - Euclidean distance (query v/a vs bucket v/a)
+    #   time      = e^(-0.02 × days) (recent memories first)
+    #   importance = importance / 10
+    # ---------------------------------------------------------
+    async def search(
+        self,
+        query: str,
+        limit: int = None,
+        domain_filter: list[str] = None,
+        query_valence: float = None,
+        query_arousal: float = None,
+    ) -> list[dict]:
+        """
+        Multi-dimensional indexed search for memory buckets.
+        多维索引搜索记忆桶。
+
+        domain_filter: pre-filter by domain (None = search all)
+        query_valence/arousal: emotion coordinates for resonance scoring
+        """
+        if not query or not query.strip():
+            return []
+
+        limit = limit or self.max_results
+        all_buckets = await self.list_all(include_archive=False)
+
+        if not all_buckets:
+            return []
+
+        # --- Layer 1: domain pre-filter (fast scope reduction) ---
+        # --- 第一层：主题域预筛（快速缩小范围）---
+        if domain_filter:
+            filter_set = {d.lower() for d in domain_filter}
+            candidates = [
+                b for b in all_buckets
+                if {d.lower() for d in b["metadata"].get("domain", [])} & filter_set
+            ]
+            # Fall back to full search if pre-filter yields nothing
+            # 预筛为空则回退全量搜索
+            if not candidates:
+                candidates = all_buckets
+        else:
+            candidates = all_buckets
+
+        # --- Layer 1.5: embedding pre-filter (optional, reduces multi-dim ranking set) ---
+        # --- 第1.5层：embedding 预筛（可选，缩小精排候选集）---
+        if self.embedding_engine and self.embedding_engine.enabled:
+            try:
+                vector_results = await self.embedding_engine.search_similar(query, top_k=50)
+                if vector_results:
+                    vector_ids = {bid for bid, _ in vector_results}
+                    emb_candidates = [b for b in candidates if b["id"] in vector_ids]
+                    if emb_candidates:  # only replace if there's non-empty overlap
+                        candidates = emb_candidates
+                    # else: keep original candidates as fallback
+            except Exception as e:
+                logger.warning(f"Embedding pre-filter failed, using fuzzy only / embedding 预筛失败: {e}")
+
+        # --- Layer 2: weighted multi-dim ranking ---
+        # --- 第二层：多维加权精排 ---
+        scored = []
+        for bucket in candidates:
+            meta = bucket.get("metadata", {})
+
+            try:
+                # Dim 1: topic relevance (fuzzy text, 0~1)
+                topic_score = self._calc_topic_score(query, bucket)
+
+                # Dim 2: emotion resonance (coordinate distance, 0~1)
+                emotion_score = self._calc_emotion_score(
+                    query_valence, query_arousal, meta
+                )
+
+                # Dim 3: time proximity (exponential decay, 0~1)
+                time_score = self._calc_time_score(meta)
+
+                # Dim 4: importance (direct normalization)
+                importance_score = max(1, min(10, int(meta.get("importance", 5)))) / 10.0
+
+                # --- Weighted sum / 加权求和 ---
+                total = (
+                    topic_score * self.w_topic
+                    + emotion_score * self.w_emotion
+                    + time_score * self.w_time
+                    + importance_score * self.w_importance
+                )
+                # Normalize to 0~100 for readability
+                weight_sum = self.w_topic + self.w_emotion + self.w_time + self.w_importance
+                normalized = (total / weight_sum) * 100 if weight_sum > 0 else 0
+
+                # Threshold check uses raw (pre-penalty) score so resolved buckets
+                # 阈值用原始分数判定，确保 resolved 桶在关键词命中时仍可被搜出
+                # remain reachable by keyword (penalty applied only to ranking).
+                if normalized >= self.fuzzy_threshold:
+                    # Resolved buckets get ranking penalty (but still reachable by keyword)
+                    # 已解决的桶仅在排序时降权
+                    if meta.get("resolved", False):
+                        normalized *= 0.3
+                    bucket["score"] = round(normalized, 2)
+                    scored.append(bucket)
+            except Exception as e:
+                logger.warning(
+                    f"Scoring failed for bucket {bucket.get('id', '?')} / "
+                    f"桶评分失败: {e}"
+                )
+                continue
+
+        scored.sort(key=lambda x: x["score"], reverse=True)
+        return scored[:limit]
+
+    # ---------------------------------------------------------
+    # Topic relevance sub-score:
+    # name(×3) + domain(×2.5) + tags(×2) + body(×1)
+    # 文本相关性子分：桶名(×3) + 主题域(×2.5) + 标签(×2) + 正文(×1)
+    # ---------------------------------------------------------
+    def _calc_topic_score(self, query: str, bucket: dict) -> float:
+        """
+        Calculate text dimension relevance score (0~1).
+        计算文本维度的相关性得分。
+        """
+        meta = bucket.get("metadata", {})
+
+        name_score = fuzz.partial_ratio(query, meta.get("name", "")) * 3
+        domain_score = (
+            max(
+                (fuzz.partial_ratio(query, d) for d in meta.get("domain", [])),
+                default=0,
+            )
+            * 2.5
+        )
+        tag_score = (
+            max(
+                (fuzz.partial_ratio(query, tag) for tag in meta.get("tags", [])),
+                default=0,
+            )
+            * 2
+        )
+        content_score = fuzz.partial_ratio(query, bucket.get("content", "")[:1000]) * self.content_weight
+
+        return (name_score + domain_score + tag_score + content_score) / (100 * (3 + 2.5 + 2 + self.content_weight))
+
+    # ---------------------------------------------------------
+    # Emotion resonance sub-score:
+    # Based on Russell circumplex Euclidean distance
+    # 情感共鸣子分：基于环形情感模型的欧氏距离
+    # No emotion in query → neutral 0.5 (doesn't affect ranking)
+    # ---------------------------------------------------------
+    def _calc_emotion_score(
+        self, q_valence: float, q_arousal: float, meta: dict
+    ) -> float:
+        """
+        Calculate emotion resonance score (0~1, closer = higher).
+        计算情感共鸣度（0~1，越近越高）。
+        """
+        if q_valence is None or q_arousal is None:
+            return 0.5  # No emotion coordinates → neutral / 无情感坐标时给中性分
+
+        try:
+            b_valence = float(meta.get("valence", 0.5))
+            b_arousal = float(meta.get("arousal", 0.3))
+        except (ValueError, TypeError):
+            return 0.5
+
+        # Euclidean distance, max sqrt(2) ≈ 1.414
+        dist = math.sqrt((q_valence - b_valence) ** 2 + (q_arousal - b_arousal) ** 2)
+        return max(0.0, 1.0 - dist / 1.414)
+
+    # ---------------------------------------------------------
+    # Time proximity sub-score:
+    # More recent activation → higher score
+    # 时间亲近子分：距上次激活越近分越高
+    # ---------------------------------------------------------
+    def _calc_time_score(self, meta: dict) -> float:
+        """
+        Calculate time proximity score (0~1, more recent = higher).
+        计算时间亲近度。
+        """
+        last_active_str = meta.get("last_active", meta.get("created", ""))
+        try:
+            last_active = datetime.fromisoformat(str(last_active_str))
+            days = max(0.0, (datetime.now() - last_active).total_seconds() / 86400)
+        except (ValueError, TypeError):
+            days = 30
+        return math.exp(-0.02 * days)
+
+    # ---------------------------------------------------------
+    # List all buckets
+    # 列出所有桶
+    # ---------------------------------------------------------
+    async def list_all(self, include_archive: bool = False) -> list[dict]:
+        """
+        Recursively walk directories (including domain subdirs), list all buckets.
+        递归遍历目录（含域子目录），列出所有记忆桶。
+        """
+        buckets = []
+
+        dirs = [self.permanent_dir, self.dynamic_dir, self.feel_dir]
+        if include_archive:
+            dirs.append(self.archive_dir)
+
+        for dir_path in dirs:
+            if not os.path.exists(dir_path):
+                continue
+            for root, _, files in os.walk(dir_path):
+                for filename in files:
+                    if not filename.endswith(".md"):
+                        continue
+                    file_path = os.path.join(root, filename)
+                    bucket = self._load_bucket(file_path)
+                    if bucket:
+                        buckets.append(bucket)
+
+        return buckets
+
+    # ---------------------------------------------------------
+    # Statistics (counts per category + total size)
+    # 统计信息（各分类桶数量 + 总体积）
+    # ---------------------------------------------------------
+    async def get_stats(self) -> dict:
+        """
+        Return memory bucket statistics (including domain subdirs).
+        返回记忆桶的统计数据。
+        """
+        stats = {
+            "permanent_count": 0,
+            "dynamic_count": 0,
+            "archive_count": 0,
+            "feel_count": 0,
+            "total_size_kb": 0.0,
+            "domains": {},
+        }
+
+        for subdir, key in [
+            (self.permanent_dir, "permanent_count"),
+            (self.dynamic_dir, "dynamic_count"),
+            (self.archive_dir, "archive_count"),
+            (self.feel_dir, "feel_count"),
+        ]:
+            if not os.path.exists(subdir):
+                continue
+            for root, _, files in os.walk(subdir):
+                for f in files:
+                    if f.endswith(".md"):
+                        stats[key] += 1
+                        fpath = os.path.join(root, f)
+                        try:
+                            stats["total_size_kb"] += os.path.getsize(fpath) / 1024
+                        except OSError:
+                            pass
+                        # Per-domain counts / 每个域的桶数量
+                        domain_name = os.path.basename(root)
+                        if domain_name != os.path.basename(subdir):
+                            stats["domains"][domain_name] = stats["domains"].get(domain_name, 0) + 1
+
+        return stats
+
+    # ---------------------------------------------------------
+    # Archive bucket (move from permanent/dynamic into archive)
+    # 归档桶（从 permanent/dynamic 移入 archive）
+    # Called by decay engine to simulate "forgetting"
+    # 由衰减引擎调用，模拟"遗忘"
+    # ---------------------------------------------------------
+    async def archive(self, bucket_id: str) -> bool:
+        """
+        Move a bucket into the archive directory (preserving domain subdirs).
+        将指定桶移入归档目录（保留域子目录结构）。
+        """
+        file_path = self._find_bucket_file(bucket_id)
+        if not file_path:
+            return False
+
+        try:
+            # Read once, get domain info and update type / 一次性读取
+            post = frontmatter.load(file_path)
+            domain = post.get("domain", ["未分类"])
+            primary_domain = sanitize_name(domain[0]) if domain else "未分类"
+            archive_subdir = os.path.join(self.archive_dir, primary_domain)
+            os.makedirs(archive_subdir, exist_ok=True)
+
+            dest = safe_path(archive_subdir, os.path.basename(file_path))
+
+            # Update type marker then move file / 更新类型标记后移动文件
+            post["type"] = "archived"
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(frontmatter.dumps(post))
+
+            # Use shutil.move for cross-filesystem safety
+            # 使用 shutil.move 保证跨文件系统安全
+            shutil.move(file_path, str(dest))
+        except Exception as e:
+            logger.error(
+                f"Failed to archive bucket / 归档桶失败: {bucket_id}: {e}"
+            )
+            return False
+
+        logger.info(f"Archived bucket / 归档记忆桶: {bucket_id} → archive/{primary_domain}/")
+        return True
+
+    # ---------------------------------------------------------
+    # Internal: find bucket file across all three directories
+    # 内部：在三个目录中查找桶文件
+    # ---------------------------------------------------------
+    def _find_bucket_file(self, bucket_id: str) -> Optional[str]:
+        """
+        Recursively search permanent/dynamic/archive for a bucket file
+        matching the given ID.
+        在 permanent/dynamic/archive 中递归查找指定 ID 的桶文件。
+        """
+        if not bucket_id:
+            return None
+        for dir_path in [self.permanent_dir, self.dynamic_dir, self.archive_dir, self.feel_dir]:
+            if not os.path.exists(dir_path):
+                continue
+            for root, _, files in os.walk(dir_path):
+                for fname in files:
+                    if not fname.endswith(".md"):
+                        continue
+                    # Match by exact ID segment in filename
+                    # 通过文件名中的 ID 片段精确匹配
+                    name_part = fname[:-3]  # remove .md
+                    if name_part == bucket_id or name_part.endswith(f"_{bucket_id}"):
+                        return os.path.join(root, fname)
+        return None
+
+    # ---------------------------------------------------------
+    # Internal: load bucket data from .md file
+    # 内部：从 .md 文件加载桶数据
+    # ---------------------------------------------------------
+    def _load_bucket(self, file_path: str) -> Optional[dict]:
+        """
+        Parse a Markdown file and return structured bucket data.
+        解析 Markdown 文件，返回桶的结构化数据。
+        """
+        try:
+            post = frontmatter.load(file_path)
+            return {
+                "id": post.get("id", Path(file_path).stem),
+                "metadata": dict(post.metadata),
+                "content": post.content,
+                "path": file_path,
+            }
+        except Exception as e:
+            logger.warning(
+                f"Failed to load bucket file / 加载桶文件失败: {file_path}: {e}"
+            )
+            return None
+
+    # ===========================================================
+    # Anchor (坐标系): important but intentionally NOT surfaced
+    # ===========================================================
+    ANCHOR_LIMIT = 24
+
+    async def count_anchors(self) -> int:
+        """Return current count of buckets with anchor=True."""
+        all_b = await self.list_all(include_archive=False)
+        return sum(1 for b in all_b if b.get("metadata", {}).get("anchor"))
+
+    async def set_anchor(self, bucket_id: str, value: bool) -> dict:
+        """
+        Toggle the anchor flag on a bucket.
+        anchor=刻意不浮现（坐标系），pinned=永远浮现（核心准则），两者互斥。
+        Returns: {"ok": bool, "anchor": bool, "count": int, "limit": int}
+        """
+        bucket = await self.get(bucket_id)
+        if not bucket:
+            return {"ok": False, "error": "bucket not found", "count": 0, "limit": self.ANCHOR_LIMIT}
+        current_value = bucket["metadata"].get("anchor", False)
+        if isinstance(current_value, str):
+            current_value = current_value.lower() in ("true", "1", "yes")
+        target = bool(value)
+        # Idempotent: same state → noop
+        if current_value == target:
+            count = await self.count_anchors()
+            return {"ok": True, "anchor": target, "count": count, "limit": self.ANCHOR_LIMIT, "noop": True}
+        if target is True:
+            # pinned 与 anchor 互斥
+            if bucket["metadata"].get("pinned") or bucket["metadata"].get("protected"):
+                return {
+                    "ok": False,
+                    "error": "这是 pinned 核心准则，不能同时设为 anchor（两者互斥）。要改成坐标系请先 trace(pinned=0)。",
+                    "count": await self.count_anchors(),
+                    "limit": self.ANCHOR_LIMIT,
+                }
+            count = await self.count_anchors()
+            if count >= self.ANCHOR_LIMIT:
+                return {
+                    "ok": False,
+                    "error": f"anchor 已达上限 {self.ANCHOR_LIMIT}。请先 release 一条再 anchor 新的。",
+                    "count": count,
+                    "limit": self.ANCHOR_LIMIT,
+                }
+        ok = await self.update(bucket_id, anchor=target)
+        if not ok:
+            return {"ok": False, "error": "update failed", "count": 0, "limit": self.ANCHOR_LIMIT}
+        new_count = await self.count_anchors()
+        return {"ok": True, "anchor": target, "count": new_count, "limit": self.ANCHOR_LIMIT}
