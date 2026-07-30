@@ -237,7 +237,7 @@
     height: 100vh;
     background: var(--surface-solid);
     border-left: 1px solid var(--border);
-    padding: 32px 28px 100px 28px;
+    padding: 32px 28px;
     overflow-y: auto;
     transform: translateX(100%);
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -1923,47 +1923,53 @@ async function galleryUpload() {
   input.click();
 }
 
-function renderGallery() {
+async function renderGallery() {
   var el = document.getElementById('gallery-list');
-  var gallery = [];
-  allBuckets.forEach(function(b) {
-    var media = b.media || [];
-    if (!media.length) return;
-    media.forEach(function(m) {
-      if (!m || !m.path) return;
-      gallery.push({ media: m, bucketId: b.id, bucketName: b.name || b.id.substring(0,12), created: b.created || '' });
+  el.innerHTML = '<div class="loading">加载图库…</div>';
+  try {
+    var res = await authFetch(BASE + '/api/gallery');
+    if (!res || !res.ok) { el.innerHTML = '<div class="loading" style="color:var(--text-dim);">图库加载失败</div>'; return; }
+    var buckets = await res.json();
+    var gallery = [];
+    buckets.forEach(function(b) {
+      (b.media || []).forEach(function(m, i) {
+        if (!m || !m.path) return;
+        gallery.push({ media: m, index: i, bucketId: b.id, bucketName: b.name || b.id.substring(0,12), created: b.created || '' });
+      });
     });
-  });
-  if (!gallery.length) {
-    el.innerHTML = '<div class="loading" style="color:var(--text-dim);">还没有上传过图片。在记忆详情里点 🖼上传图片 即可</div>';
-    return;
+    if (!gallery.length) {
+      el.innerHTML = '<div class="loading" style="color:var(--text-dim);">还没有上传过图片。在记忆详情里点 🖼上传图片 即可</div>';
+      return;
+    }
+    gallery.sort(function(a, b) { return (b.created || '').localeCompare(a.created || ''); });
+    var html = '<div style="margin-bottom:12px;color:var(--text-dim);font-size:13px;">共 ' + gallery.length + ' 张图片</div>';
+    html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;">';
+    gallery.forEach(function(item) {
+      var m = item.media;
+      var path = m.path || '';
+      var title = m.title || '图片';
+      var desc = m.description || '';
+      var isUrl = path.startsWith('http') || path.startsWith('data:');
+      var imgUrl = isUrl ? path : (m.stored ? (BASE + '/api/media/' + path) : path);
+      html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;">' +
+        '<img src="' + esc(imgUrl) + '" alt="' + esc(title) + '" style="width:100%;height:140px;object-fit:cover;cursor:pointer;" onclick="openLightbox(\'' + esc(imgUrl) + '\')">' +
+        '<div style="padding:8px;">' +
+          '<div style="font-size:12px;color:var(--text);font-weight:600;cursor:pointer;text-decoration:underline;" onclick="showDetail(\'' + item.bucketId + '\')">' + esc(item.bucketName) + '</div>' +
+          '<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">' + esc(title) + '</div>' +
+          (desc ? '<div style="font-size:11px;color:var(--text);margin-top:4px;line-height:1.4;">' +
+            (desc.length > 60
+              ? '<span id="gdesc-s-' + item.bucketId + '-' + item.index + '">📝 ' + esc(desc.substring(0,60)) + '… <span style="cursor:pointer;color:var(--accent);" onclick="event.stopPropagation();var s=document.getElementById(\'gdesc-s-' + item.bucketId + '-' + item.index + '\');var f=document.getElementById(\'gdesc-f-' + item.bucketId + '-' + item.index + '\');s.style.display=\'none\';f.style.display=\'\';">展开</span></span>' +
+                '<span id="gdesc-f-' + item.bucketId + '-' + item.index + '" style="display:none;">📝 ' + esc(desc) + ' <span style="cursor:pointer;color:var(--accent);" onclick="event.stopPropagation();var s=document.getElementById(\'gdesc-s-' + item.bucketId + '-' + item.index + '\');var f=document.getElementById(\'gdesc-f-' + item.bucketId + '-' + item.index + '\');s.style.display=\'\';f.style.display=\'none\';">收起</span></span>'
+              : '📝 ' + esc(desc)) +
+          '</div>' : '') +
+        '</div>' +
+      '</div>';
+    });
+    html += '</div>';
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = '<div class="loading" style="color:var(--text-dim);">图库加载失败: ' + e.message + '</div>';
   }
-  gallery.sort(function(a, b) { return (b.created || '').localeCompare(a.created || ''); });
-  var html = '<div style="margin-bottom:12px;color:var(--text-dim);font-size:13px;">共 ' + gallery.length + ' 张图片</div>';
-  html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;">';
-  gallery.forEach(function(item) {
-    var m = item.media;
-    var path = m.path || '';
-    var title = m.title || '图片';
-    var desc = m.description || '';
-    var isUrl = path.startsWith('http') || path.startsWith('data:');
-    var imgUrl = isUrl ? path : (m.stored ? (BASE + '/api/media/' + path) : path);
-    html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;">' +
-      '<img src="' + esc(imgUrl) + '" alt="' + esc(title) + '" style="width:100%;height:140px;object-fit:cover;cursor:pointer;" onclick="openLightbox(\'' + esc(imgUrl) + '\')">' +
-      '<div style="padding:8px;">' +
-        '<div style="font-size:12px;color:var(--text);font-weight:600;cursor:pointer;text-decoration:underline;" onclick="showDetail(\'' + item.bucketId + '\')">' + esc(item.bucketName) + '</div>' +
-        '<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">' + esc(title) + '</div>' +
-        (desc ? '<div style="font-size:11px;color:var(--text);margin-top:4px;line-height:1.4;">' +
-          (desc.length > 60
-            ? '<span id="gdesc-s-' + item.bucketId + '-' + i + '">📝 ' + esc(desc.substring(0,60)) + '… <span style="cursor:pointer;color:var(--accent);" onclick="event.stopPropagation();var s=document.getElementById(\'gdesc-s-' + item.bucketId + '-' + i + '\');var f=document.getElementById(\'gdesc-f-' + item.bucketId + '-' + i + '\');s.style.display=\'none\';f.style.display=\'\';">展开</span></span>' +
-              '<span id="gdesc-f-' + item.bucketId + '-' + i + '" style="display:none;">📝 ' + esc(desc) + ' <span style="cursor:pointer;color:var(--accent);" onclick="event.stopPropagation();var s=document.getElementById(\'gdesc-s-' + item.bucketId + '-' + i + '\');var f=document.getElementById(\'gdesc-f-' + item.bucketId + '-' + i + '\');s.style.display=\'\';f.style.display=\'none\';">收起</span></span>'
-            : '📝 ' + esc(desc)) +
-        '</div>' : '') +
-      '</div>' +
-    '</div>';
-  });
-  html += '</div>';
-  el.innerHTML = html;
 }
 
 // --- Detail field inline editing ---
@@ -2188,7 +2194,8 @@ async function showDetail(id) {
         '<button onclick="openEdit(\'' + id + '\')">✏️ 编辑</button>' +
         '<button onclick="uploadMedia(\'' + id + '\')">🖼 上传图片</button>' +
         '<button class="btn-delete" onclick="deleteBucket(\'' + id + '\')">🗑 删除</button>' +
-      '</div>';
+      '</div>' +
+      '<div style="height:120px;"></div>';
   } catch (e) {
     content.innerHTML = '<div class="loading">加载失败: ' + e.message + '</div>';
   }
