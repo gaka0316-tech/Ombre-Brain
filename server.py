@@ -2471,6 +2471,31 @@ async def api_backup(request):
     )
 
 
+@mcp.custom_route("/api/gallery", methods=["GET"])
+async def api_gallery(request):
+    """Return only buckets that have media, for fast gallery rendering."""
+    from starlette.responses import JSONResponse
+    err = _require_auth(request)
+    if err: return err
+    try:
+        all_buckets = await bucket_mgr.list_all(include_archive=False)
+        gallery = []
+        for b in all_buckets:
+            meta = b.get("metadata", {})
+            media = meta.get("media", [])
+            if not media:
+                continue
+            gallery.append({
+                "id": b["id"],
+                "name": meta.get("name", b["id"]),
+                "created": meta.get("created", ""),
+                "media": media,
+            })
+        return JSONResponse(gallery)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @mcp.custom_route("/api/search", methods=["GET"])
 async def api_search(request):
     """Search buckets by query."""
