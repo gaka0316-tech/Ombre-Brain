@@ -2688,7 +2688,7 @@ async def api_v2_breath(request):
             body = await request.json()
         else:
             body = dict(request.query_params)
-        result = await breath(
+        result = await _breath_dispatch(
             query=body.get("query", ""),
             max_tokens=int(body.get("max_tokens", 10000)),
             domain=body.get("domain", ""),
