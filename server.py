@@ -120,12 +120,7 @@ _mcp_secret = os.environ.get("OMBRE_MCP_SECRET", "").strip()
 _mcp_path = f"/mcp-{_mcp_secret}" if _mcp_secret else "/mcp"
 if _mcp_secret:
     logger.info(f"MCP path secret enabled → {_mcp_path}")
-mcp = FastMCP(
-    "Ombre Brain",
-    host="0.0.0.0",
-    port=OMBRE_PORT,
-    streamable_http_path=_mcp_path,
-)
+mcp = FastMCP("Ombre Brain")
 
 
 # =============================================================
@@ -3288,9 +3283,9 @@ if __name__ == "__main__":
         # --- Add CORS middleware so remote clients (Cloudflare Tunnel / ngrok) can connect ---
         # --- 添加 CORS 中间件，让远程客户端（Cloudflare Tunnel / ngrok）能正常连接 ---
         if transport == "streamable-http":
-            _app = mcp.streamable_http_app()
+            _app = mcp.http_app(path=_mcp_path)
         else:
-            _app = mcp.sse_app()
+            _app = mcp.http_app(path=_mcp_path)
         _app.add_middleware(
             CORSMiddleware,
             allow_origins=["*"],
