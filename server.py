@@ -111,6 +111,14 @@ dehydrator = Dehydrator(config)                      # Dehydrator / 脱水器
 decay_engine = DecayEngine(config, bucket_mgr)       # Decay engine / 衰减引擎
 import_engine = ImportEngine(config, bucket_mgr, dehydrator, embedding_engine)  # Import engine / 导入引擎
 
+# --- Initialize reminder & darkroom stores ---
+from reminder_store import ReminderStore
+from darkroom_store import DarkroomStore
+_state_dir = os.path.join(os.path.dirname(os.path.abspath(config.get("buckets_dir", "buckets"))), "state")
+os.makedirs(_state_dir, exist_ok=True)
+reminder_store = ReminderStore(os.path.join(_state_dir, "reminders.json"))
+darkroom_store = DarkroomStore(os.path.join(_state_dir, "darkroom.json"))
+
 # --- Create MCP server instance / 创建 MCP 服务器实例 ---
 # host="0.0.0.0" so Docker container's SSE is externally reachable
 # stdio mode ignores host (no network)
@@ -912,11 +920,19 @@ async def _breath_dispatch(
             logger.warning(f"Failed to dehydrate search result / 检索结果脱水失败: {e}")
             continue
 
+    # --- Load all buckets once on main path ---
+    # --- 主路径统一加载一次：随机浮现 / I / 关联feel 三处共用 ---
+    # （原来只在随机浮现分支内定义，导致 I 部分在 matches>=3 时静默失效）
+    try:
+        all_buckets = await bucket_mgr.list_all(include_archive=False)
+    except Exception as e:
+        logger.warning(f"Failed to load buckets for post-search sections: {e}")
+        all_buckets = []
+
     # --- Random surfacing: when search returns < 3, 40% chance to float old memories ---
     # --- 随机浮现：检索结果不足 3 条时，40% 概率从低权重旧桶里漂上来 ---
     if len(matches) < 3 and random.random() < 0.4:
         try:
-            all_buckets = await bucket_mgr.list_all(include_archive=False)
             matched_ids = {b["id"] for b in matches}
             low_weight = [
                 b for b in all_buckets
@@ -968,8 +984,356 @@ async def _breath_dispatch(
     except Exception as e:
         logger.warning(f"breath I section failed: {e}")
 
+    # --- Archive search annotation: check if query matches archived buckets ---
+    # --- 归档搜索标注：检查归档桶中是否有匹配项 ---
+    try:
+        archive_only = await bucket_mgr.list_archived()
+        if archive_only and query:
+            q_lower = query.lower()
+            archive_hits = []
+            for b in archive_only:
+                meta = b.get("metadata", {})
+                haystack = " ".join([
+                    meta.get("name", ""),
+                    b.get("content", ""),
+                    " ".join(meta.get("tags", [])),
+                    " ".join(meta.get("domain", []) if isinstance(meta.get("domain"), list) else [str(meta.get("domain", ""))]),
+                ]).lower()
+                if q_lower in haystack:
+                    archive_hits.append(b)
+            if archive_hits:
+                archive_lines = []
+                for ab in archive_hits[:3]:
+                    ab_meta = ab.get("metadata", {})
+                    ab_name = ab_meta.get("name", ab["id"][:12])
+                    ab_created = ab_meta.get("created", "")[:10]
+                    archive_lines.append(
+                        f"📦 {ab_name} [{ab_created}] [bucket_id:{ab['id']}]"
+                    )
+                final_text += (
+                    "\n\n=== 已归档记忆（退出日常浮现）===\n"
+                    + "\n".join(archive_lines)
+                    + "\n💡 如需恢复：trace(bucket_id, restore=True)"
+                )
+    except Exception as e:
+        logger.warning(f"Archive search annotation failed: {e}")
+
+    # --- Triggered feels: attach related feel buckets ---
+    # --- 关联feel：附上与浮现记忆相关的感受 ---
+    try:
+        if matches:
+            # Pre-fetch feel buckets once, reuse across all matches
+            # 预拉一次feel列表，5个match共用，避免重复全量遍历
+            all_feels = [
+                b for b in all_buckets
+                if b.get("metadata", {}).get("type") == "feel"
+            ]
+            triggered_feel_ids = set()
+            triggered_feels = []
+            if all_feels:
+                for b in matches[:5]:
+                    feels = await bucket_mgr.get_triggered_feels(
+                        b["id"], max_feels=2, feels=all_feels
+                    )
+                    for feel in feels:
+                        if feel["id"] not in triggered_feel_ids:
+                            triggered_feel_ids.add(feel["id"])
+                            triggered_feels.append(feel)
+            if triggered_feels:
+                feel_lines = []
+                for tf in triggered_feels[:3]:
+                    tf_meta = tf.get("metadata", {})
+                    tf_created = tf_meta.get("created", "")[:10]
+                    tf_excerpt = strip_wikilinks(tf.get("content", ""))[:200]
+                    feel_lines.append(f"🫧 [{tf_created}] {tf_excerpt}")
+                final_text += "\n\n=== 相关感受 ===\n" + "\n\n".join(feel_lines)
+    except Exception as e:
+        logger.warning(f"Triggered feels failed: {e}")
+
     await _fire_webhook("breath", {"mode": "ok", "matches": len(matches), "chars": len(final_text)})
     return final_text
+
+
+# =============================================================
+# Tool: reminder_create — Create a standalone reminder
+# 工具：reminder_create — 创建独立照顾备忘
+# =============================================================
+@mcp.tool()
+async def reminder_create(
+    title: str,
+    content: str = "",
+    due_at: str = "",
+) -> str:
+    """创建独立照顾备忘。不进记忆桶、不触发embedding。due_at可选截止时间(ISO格式或自然语言如"明天""下周一")。"""
+    if not title or not title.strip():
+        return "标题不能为空。"
+    entry = reminder_store.create(title=title, content=content, due_at=due_at)
+    parts = [f"已创建备忘: {entry['title']}"]
+    parts.append(f"ID: {entry['id']}")
+    if entry.get("due_at"):
+        parts.append(f"截止: {entry['due_at']}")
+    return "\n".join(parts)
+
+
+# =============================================================
+# Tool: reminder_list — List reminders
+# 工具：reminder_list — 查看备忘列表
+# =============================================================
+@mcp.tool()
+async def reminder_list(
+    status: str = "active",
+    limit: int = 20,
+) -> str:
+    """列出照顾备忘。status可选active/done/all。"""
+    items = reminder_store.list(status=status, limit=limit)
+    if not items:
+        return f"没有{status}状态的备忘。"
+    lines = [f"=== 备忘列表 ({status}) ==="]
+    for r in items:
+        due = f" | 截止: {r['due_at']}" if r.get("due_at") else ""
+        done = " ✓" if r.get("status") == "done" else ""
+        lines.append(f"[{r['id']}] {r['title']}{done}{due}")
+        if r.get("content"):
+            lines.append(f"  {r['content'][:100]}")
+    return "\n".join(lines)
+
+
+# =============================================================
+# Tool: reminder_update — Update a reminder
+# 工具：reminder_update — 更新备忘状态
+# =============================================================
+@mcp.tool()
+async def reminder_update(
+    reminder_id: str,
+    status: str = "",
+    title: str = "",
+    content: str = "",
+    due_at: str = "",
+) -> str:
+    """更新备忘。status可选active/done/archived。也可改title/content/due_at。"""
+    if not reminder_id or not reminder_id.strip():
+        return "请提供有效的 reminder_id。"
+    result = reminder_store.update(
+        reminder_id, title=title, content=content, status=status, due_at=due_at,
+    )
+    if not result:
+        return f"未找到备忘: {reminder_id}"
+    status_text = f" → {result['status']}" if status else ""
+    return f"已更新备忘 {reminder_id}: {result['title']}{status_text}"
+
+
+# =============================================================
+# Tool: darkroom_enter — Write a private reflection
+# 工具：darkroom_enter — 写入暗房反思
+# =============================================================
+@mcp.tool()
+async def darkroom_enter(
+    note: str,
+    lock_for: str = "",
+    mood: str = "",
+    tags: str = "",
+    new_room: bool = True,
+) -> str:
+    """写入一段未想透的私密反思，不回显内容。默认新开房间，new_room=false续写当前房间。lock_for可选锁门时间如"6h"/"3d"，锁门期间不能查看内容。"""
+    result = darkroom_store.enter(
+        note, mood=mood, tags=tags, lock_for=lock_for, new_room=new_room,
+    )
+    if result.get("error"):
+        return f"暗房写入失败: {result['error']}"
+    parts = [f"已写入暗房 🌑"]
+    parts.append(f"房间: {result['room_id']}")
+    parts.append(f"笔记数: {result['notes_count']}")
+    if result.get("locked"):
+        parts.append(f"锁门至: {result['unlock_at']}")
+    else:
+        parts.append("未锁门（随时可查看）")
+    return "\n".join(parts)
+
+
+# =============================================================
+# Tool: darkroom_view — View darkroom rooms/content
+# 工具：darkroom_view — 查看暗房
+# =============================================================
+@mcp.tool()
+async def darkroom_view(
+    room_id: str = "",
+    list_rooms: bool = False,
+    visibility: str = "active",
+) -> str:
+    """查看暗房。list_rooms=True列出所有房间门牌(不含内容)；传room_id查看具体房间内容(锁门期间只看门牌)。"""
+    if list_rooms or not room_id:
+        rooms = darkroom_store.rooms(limit=20, visibility=visibility)
+        if not rooms:
+            return "暗房空空如也。"
+        lines = ["=== 暗房门牌 🌑 ==="]
+        for r in rooms:
+            lock_status = f"🔒 至 {r['unlock_at']}" if r.get("locked") else "🔓"
+            mood = f" | {r['mood']}" if r.get("mood") else ""
+            lines.append(f"[{r['room_id']}] {r['created'][:10]} | {r['notes_count']}条笔记 | {lock_status}{mood}")
+        return "\n".join(lines)
+
+    result = darkroom_store.view(room_id)
+    if result.get("error"):
+        return f"查看失败: {result['error']}"
+    if result.get("locked"):
+        return f"🔒 这间暗房还没到开门时间。解锁时间: {result.get('unlock_at', '')}"
+
+    lines = [f"=== 暗房 {room_id} 🌑 ==="]
+    if result.get("mood"):
+        lines.append(f"心境: {result['mood']}")
+    if result.get("tags"):
+        lines.append(f"标签: {', '.join(result['tags'])}")
+    lines.append("")
+    for n in result.get("notes", []):
+        lines.append(f"[{n.get('created', '')[:16]}]")
+        lines.append(n.get("content", ""))
+        lines.append("")
+    return "\n".join(lines)
+
+
+# =============================================================
+# Tool: darkroom_delete — Delete a darkroom room
+# 工具：darkroom_delete — 删除暗房房间
+# =============================================================
+@mcp.tool()
+async def darkroom_delete(
+    room_id: str,
+    confirm: str = "",
+) -> str:
+    """删除暗房房间及全部笔记。必须传confirm='DELETE'确认。"""
+    if not room_id or not room_id.strip():
+        return "请提供 room_id。"
+    result = darkroom_store.delete(room_id, confirm=confirm)
+    if result.get("error"):
+        return f"删除失败: {result['error']}"
+    return f"已删除暗房房间 {room_id}。"
+
+
+# =============================================================
+# Tool: read_bucket — Read a bucket by ID
+# 工具：read_bucket — 按ID精确读取记忆桶
+# =============================================================
+@mcp.tool()
+async def read_bucket(bucket_id: str) -> str:
+    """按bucket_id精确读取完整记忆桶内容。只读，不刷新活跃度。trace/comment前先读。"""
+    if not bucket_id or not bucket_id.strip():
+        return "请提供有效的 bucket_id。"
+
+    bucket = await bucket_mgr.get(bucket_id)
+    if not bucket:
+        return f"未找到记忆桶: {bucket_id}"
+
+    meta = bucket.get("metadata", {})
+    parts = [f"=== 记忆桶 {bucket_id} ==="]
+    parts.append(f"名称: {meta.get('name', '未命名')}")
+    parts.append(f"类型: {meta.get('type', 'dynamic')}")
+    parts.append(f"域: {meta.get('domain', [])}")
+    parts.append(f"标签: {meta.get('tags', [])}")
+    parts.append(f"重要度: {meta.get('importance', 5)}")
+    if meta.get("valence") is not None:
+        parts.append(f"效价: {meta.get('valence')} / 唤醒度: {meta.get('arousal')}")
+    parts.append(f"创建: {meta.get('created', '')}")
+    parts.append(f"最近活跃: {meta.get('last_active', '')}")
+    parts.append(f"已解决: {meta.get('resolved', False)}")
+    parts.append(f"钉选: {meta.get('pinned', False)}")
+    if meta.get("anchor"):
+        parts.append(f"坐标系: {meta.get('anchor')}")
+    if meta.get("meaning"):
+        parts.append(f"meaning: {meta.get('meaning')}")
+    if meta.get("media"):
+        parts.append(f"图片: {len(meta.get('media', []))} 张")
+    if meta.get("source"):
+        parts.append(f"来源: {meta.get('source')}")
+
+    # Comments / 年轮
+    comments = meta.get("comments", [])
+    if comments:
+        parts.append(f"\n--- 年轮评注 ({len(comments)} 条) ---")
+        for c in comments:
+            if isinstance(c, dict):
+                c_time = c.get("created", "")[:10]
+                c_author = c.get("author", "")
+                c_kind = c.get("kind", "comment")
+                c_id = c.get("id", "")
+                parts.append(f"[{c_time}] ({c_kind}) by {c_author} [comment_id:{c_id}]")
+                parts.append(f"  {c.get('content', '')}")
+
+    parts.append(f"\n--- 正文 ---\n{strip_wikilinks(bucket.get('content', ''))}")
+    return "\n".join(parts)
+
+
+# =============================================================
+# Tool: comment_bucket — Add a year ring to a bucket
+# 工具：comment_bucket — 给记忆桶追加年轮评注
+# =============================================================
+@mcp.tool()
+async def comment_bucket(
+    bucket_id: str,
+    content: str,
+    kind: str = "comment",
+    valence: float = -1,
+    arousal: float = -1,
+) -> str:
+    """给已有记忆桶追加年轮评注，不改正文。再读旧记忆后的新感受、补充说明用这个。kind可选comment(普通评注)/feel(第一人称感受)。valence/arousal 0~1可选。"""
+    if not bucket_id or not bucket_id.strip():
+        return "请提供有效的 bucket_id。"
+    if not content or not content.strip():
+        return "评注内容不能为空。"
+
+    bucket = await bucket_mgr.get(bucket_id)
+    if not bucket:
+        return f"未找到记忆桶: {bucket_id}"
+
+    v = valence if 0 <= valence <= 1 else None
+    a = arousal if 0 <= arousal <= 1 else None
+
+    entry = await bucket_mgr.add_comment(
+        bucket_id,
+        content.strip(),
+        author="cloudy",
+        kind=kind or "comment",
+        valence=v,
+        arousal=a,
+        touch=True,
+    )
+
+    if not entry:
+        return f"评注写入失败: {bucket_id}"
+
+    bucket_name = bucket.get("metadata", {}).get("name", bucket_id[:12])
+    comment_count = len(bucket.get("metadata", {}).get("comments", [])) + 1
+    return (
+        f"已给记忆桶 {bucket_id} ({bucket_name}) 追加年轮评注。\n"
+        f"评注ID: {entry.get('id', '')}\n"
+        f"类型: {entry.get('kind', 'comment')}\n"
+        f"该桶现有 {comment_count} 条年轮。"
+    )
+
+
+# =============================================================
+# Tool: delete_bucket_comment — Delete a year ring
+# 工具：delete_bucket_comment — 删除年轮评注
+# =============================================================
+@mcp.tool()
+async def delete_bucket_comment(
+    bucket_id: str,
+    comment_id: str,
+) -> str:
+    """删除指定的年轮评注；只能删除cloudy写的评注。先用read_bucket看comment_id。"""
+    if not bucket_id or not bucket_id.strip():
+        return "请提供有效的 bucket_id。"
+    if not comment_id or not comment_id.strip():
+        return "请提供有效的 comment_id。"
+
+    result = await bucket_mgr.delete_comment(bucket_id, comment_id)
+    status = result.get("status", "")
+    if status == "deleted":
+        return f"已删除年轮评注 {comment_id}。"
+    if status == "not_found":
+        return f"未找到评注 {comment_id}，请用 read_bucket 确认。"
+    if status == "forbidden":
+        return "只能删除cloudy自己写的年轮评注。"
+    return f"删除失败: {status}"
 
 
 # =============================================================
@@ -1314,8 +1678,9 @@ async def trace(
     media_desc: str = "",
     old_str: str = "",
     new_str: str = None,
+    restore: bool = False,
 ) -> str:
-    """修改记忆元数据或内容。resolved=1沉底/0激活,pinned=1钉选/0取消,digested=1隐藏(保留但不浮现)/0取消隐藏,content=替换桶正文,delete=True删除。meaning=追加一条情感锚定(不覆盖已有的)。meaning_index+meaning=编辑指定meaning(索引从0开始)。meaning_delete=删除指定meaning(索引从0开始)。anchor的设置请用anchor()/release()工具。media_index+media_desc=修改指定图片的描述(索引从0开始)。old_str+new_str=局部替换正文(old_str必须在正文中唯一出现,new_str可为空字符串表示删除片段;不能与content同时使用)。old_str+new_str+meaning_index=局部替换指定meaning中的片段。只传需改的,-1或空=不改。"""
+    """修改记忆元数据或内容。resolved=1沉底/0激活,pinned=1钉选/0取消,digested=1隐藏(保留但不浮现)/0取消隐藏,content=替换桶正文,delete=True删除。meaning=追加一条情感锚定(不覆盖已有的)。meaning_index+meaning=编辑指定meaning(索引从0开始)。meaning_delete=删除指定meaning(索引从0开始)。anchor的设置请用anchor()/release()工具。media_index+media_desc=修改指定图片的描述(索引从0开始)。old_str+new_str=局部替换正文(old_str必须在正文中唯一出现,new_str可为空字符串表示删除片段;不能与content同时使用)。old_str+new_str+meaning_index=局部替换指定meaning中的片段。restore=True将已归档的记忆恢复到日常召回。只传需改的,-1或空=不改。"""
 
     if not bucket_id or not bucket_id.strip():
         return "请提供有效的 bucket_id。"
@@ -1334,6 +1699,19 @@ async def trace(
         return "局部替换必须同时提供 old_str 和 new_str；new_str 可以是空字符串表示删除片段。"
     if patch_mode and old_str == new_str:
         return "old_str 与 new_str 完全相同，没有内容需要替换。"
+
+    # --- Restore mode / 归档恢复模式 ---
+    if restore:
+        result = await bucket_mgr.restore_archived(bucket_id)
+        if result.get("ok"):
+            restored_to = result.get("restored_to", "dynamic")
+            return f"已恢复记忆桶 {bucket_id} → {restored_to}，重新参与日常浮现。"
+        error = result.get("error", "unknown")
+        if error == "not_found":
+            return f"未找到记忆桶: {bucket_id}"
+        if error == "not_archived":
+            return result.get("message", "该记忆桶不在归档中，无需恢复。")
+        return f"恢复失败: {error}"
 
     # --- Delete mode / 删除模式 ---
     if delete:
