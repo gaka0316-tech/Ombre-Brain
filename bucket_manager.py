@@ -945,3 +945,285 @@ class BucketManager:
             return {"ok": False, "error": "update failed", "count": 0, "limit": self.ANCHOR_LIMIT}
         new_count = await self.count_anchors()
         return {"ok": True, "anchor": target, "count": new_count, "limit": self.ANCHOR_LIMIT}
+
+    # ===========================================================
+    # Restore archived bucket (归档恢复)
+    # ===========================================================
+    async def restore_archived(self, bucket_id: str) -> dict:
+        """
+        Restore an archived bucket back to its original channel (dynamic/feel).
+        将已归档的记忆桶恢复到日常召回。
+        Returns: {"ok": bool, "restored_to": str, "bucket_id": str}
+        """
+        file_path = self._find_bucket_file(bucket_id)
+        if not file_path:
+            return {"ok": False, "error": "not_found"}
+
+        # Verify the file is actually in the archive directory
+        normalized_path = os.path.normcase(os.path.abspath(file_path))
+        normalized_archive = os.path.normcase(os.path.abspath(self.archive_dir))
+        try:
+            in_archive = (
+                os.path.commonpath([normalized_path, normalized_archive])
+                == normalized_archive
+            )
+        except ValueError:
+            in_archive = False
+
+        if not in_archive:
+            return {
+                "ok": False,
+                "error": "not_archived",
+                "message": "该记忆桶不在归档中，无需恢复。",
+            }
+
+        try:
+            post = frontmatter.load(file_path)
+        except Exception as exc:
+            return {"ok": False, "error": f"read_failed: {exc}"}
+
+        # Determine target directory based on bucket type
+        bucket_type = post.get("type", "dynamic")
+        if bucket_type == "feel":
+            target_base = self.feel_dir
+        else:
+            target_base = self.dynamic_dir
+
+        # Restore into domain subdirectory if present
+        domain = post.get("domain", [])
+        if isinstance(domain, list) and domain:
+            target_dir = os.path.join(target_base, domain[0])
+        elif isinstance(domain, str) and domain:
+            target_dir = os.path.join(target_base, domain)
+        else:
+            target_dir = target_base
+
+        os.makedirs(target_dir, exist_ok=True)
+
+        # Update metadata: clear resolved, refresh last_active
+        post["resolved"] = False
+        post["last_active"] = now_iso()
+
+        # Move file: write to target, remove from archive
+        filename = os.path.basename(file_path)
+        target_path = os.path.join(target_dir, filename)
+
+        with open(target_path, "w", encoding="utf-8") as f:
+            f.write(frontmatter.dumps(post))
+
+        os.remove(file_path)
+
+        return {"ok": True, "restored_to": bucket_type, "bucket_id": bucket_id}
+
+    # ===========================================================
+    # List archived buckets only (轻量：只遍历归档目录)
+    # ===========================================================
+    async def list_archived(self) -> list[dict]:
+        """
+        List only archived buckets by walking the archive directory.
+        只遍历归档目录，不碰 permanent/dynamic/feel。
+        """
+        buckets = []
+        if not os.path.exists(self.archive_dir):
+            return buckets
+        for root, _, files in os.walk(self.archive_dir):
+            for filename in files:
+                if not filename.endswith(".md"):
+                    continue
+                bucket = self._load_bucket(os.path.join(root, filename))
+                if bucket:
+                    buckets.append(bucket)
+        return buckets
+
+    # ===========================================================
+    # Get triggered feels (关联feel召回)
+    # ===========================================================
+    async def get_triggered_feels(self, source_bucket_id: str, max_feels: int = 3, feels: list[dict] = None) -> list[dict]:
+        """
+        Find feel buckets related to a given source bucket.
+        根据标签、域、时间关联，找到与指定桶相关的feel桶。
+        """
+        source = await self.get(source_bucket_id)
+        if not source:
+            return []
+
+        source_meta = source.get("metadata", {})
+        source_tags = set(source_meta.get("tags", []))
+        source_domain = source_meta.get("domain", [])
+        if isinstance(source_domain, str):
+            source_domain = [source_domain]
+        source_domain_set = set(source_domain)
+        source_created = source_meta.get("created", "")
+
+        # Get all feel buckets (use pre-fetched list if provided)
+        # 优先使用外部预拉的feel列表，避免重复全量遍历
+        if feels is None:
+            all_buckets = await self.list_all(include_archive=False)
+            feels = [b for b in all_buckets if b.get("metadata", {}).get("type") == "feel"]
+
+        if not feels:
+            return []
+
+        # Score each feel by relevance to source bucket
+        scored = []
+        for feel in feels:
+            feel_meta = feel.get("metadata", {})
+            score = 0.0
+
+            # source_bucket match (direct link)
+            if feel_meta.get("source_bucket") == source_bucket_id:
+                score += 5.0
+
+            # Tag overlap
+            feel_tags = set(feel_meta.get("tags", []))
+            tag_overlap = len(source_tags & feel_tags - {"__feel__"})
+            score += tag_overlap * 1.5
+
+            # Domain overlap
+            feel_domain = feel_meta.get("domain", [])
+            if isinstance(feel_domain, str):
+                feel_domain = [feel_domain]
+            domain_overlap = len(source_domain_set & set(feel_domain) - {"沉淀物"})
+            score += domain_overlap * 1.0
+
+            # Time proximity (feels created close in time to the source)
+            try:
+                s_time = datetime.fromisoformat(str(source_created))
+                f_time = datetime.fromisoformat(str(feel_meta.get("created", "")))
+                hours_apart = abs((s_time - f_time).total_seconds()) / 3600
+                if hours_apart <= 24:
+                    score += 2.0
+                elif hours_apart <= 72:
+                    score += 1.0
+            except (ValueError, TypeError):
+                pass
+
+            if score > 0:
+                scored.append((score, feel))
+
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [item[1] for item in scored[:max_feels]]
+
+    # ===========================================================
+    # Comment / 年轮评注: append without changing body
+    # ===========================================================
+    async def add_comment(
+        self,
+        bucket_id: str,
+        content: str,
+        *,
+        author: str = "cloudy",
+        kind: str = "comment",
+        valence: float = None,
+        arousal: float = None,
+        touch: bool = True,
+    ) -> Optional[dict]:
+        """
+        Append a ring/comment to an existing bucket without changing its body.
+        给已有桶追加年轮评注，不改正文。
+        """
+        file_path = self._find_bucket_file(bucket_id)
+        if not file_path or not content or not str(content).strip():
+            return None
+
+        try:
+            post = frontmatter.load(file_path)
+        except Exception as e:
+            logger.warning(f"Failed to load bucket for comment: {file_path}: {e}")
+            return None
+
+        comments = post.get("comments", [])
+        if not isinstance(comments, list):
+            comments = []
+
+        now = now_iso()
+        entry = {
+            "id": generate_bucket_id(),
+            "created": now,
+            "author": str(author or "cloudy"),
+            "kind": str(kind or "comment"),
+            "content": str(content).strip(),
+        }
+        if valence is not None and 0 <= valence <= 1:
+            entry["valence"] = round(float(valence), 2)
+        if arousal is not None and 0 <= arousal <= 1:
+            entry["arousal"] = round(float(arousal), 2)
+
+        comments.append(entry)
+        post["comments"] = comments
+        post["comment_count"] = len(comments)
+        post["updated_at"] = now
+
+        if touch:
+            post["last_active"] = now
+            post["activation_count"] = post.get("activation_count", 0) + 1
+
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(frontmatter.dumps(post))
+        except OSError as e:
+            logger.error(f"Failed to write comment: {file_path}: {e}")
+            return None
+
+        if touch:
+            try:
+                current_time = datetime.fromisoformat(
+                    str(post.get("created", post.get("last_active", "")))
+                )
+            except (ValueError, TypeError):
+                current_time = datetime.now()
+            try:
+                await self._time_ripple(bucket_id, current_time)
+            except Exception:
+                pass
+
+        return entry
+
+    async def delete_comment(
+        self,
+        bucket_id: str,
+        comment_id: str,
+        allowed_author: str = "cloudy",
+    ) -> dict:
+        """
+        Delete a specific comment by ID; only comments by allowed_author can be deleted.
+        按ID删除年轮；只能删自己写的。
+        """
+        file_path = self._find_bucket_file(bucket_id)
+        if not file_path:
+            return {"status": "not_found"}
+
+        try:
+            post = frontmatter.load(file_path)
+        except Exception:
+            return {"status": "read_failed"}
+
+        comments = post.get("comments", [])
+        if not isinstance(comments, list):
+            return {"status": "not_found"}
+
+        target_idx = None
+        for i, c in enumerate(comments):
+            if isinstance(c, dict) and c.get("id") == comment_id:
+                target_idx = i
+                break
+
+        if target_idx is None:
+            return {"status": "not_found"}
+
+        target = comments[target_idx]
+        if target.get("author") != allowed_author:
+            return {"status": "forbidden"}
+
+        comments.pop(target_idx)
+        post["comments"] = comments
+        post["comment_count"] = len(comments)
+        post["updated_at"] = now_iso()
+
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(frontmatter.dumps(post))
+        except OSError:
+            return {"status": "write_failed"}
+
+        return {"status": "deleted", "comment_id": comment_id}
