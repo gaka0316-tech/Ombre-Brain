@@ -114,7 +114,7 @@ import_engine = ImportEngine(config, bucket_mgr, dehydrator, embedding_engine)  
 # --- Initialize reminder & darkroom stores ---
 from reminder_store import ReminderStore
 from darkroom_store import DarkroomStore
-_state_dir = os.path.join(os.path.dirname(os.path.abspath(config.get("buckets_dir", "buckets"))), "state")
+_state_dir = os.path.join(os.path.abspath(config.get("buckets_dir", "buckets")), "_state")
 os.makedirs(_state_dir, exist_ok=True)
 reminder_store = ReminderStore(os.path.join(_state_dir, "reminders.json"))
 darkroom_store = DarkroomStore(os.path.join(_state_dir, "darkroom.json"))
@@ -952,9 +952,12 @@ async def _breath_dispatch(
 
     if not results:
         await _fire_webhook("breath", {"mode": "empty", "matches": 0})
-        return "未找到相关记忆。"
-
-    final_text = "\n---\n".join(results)
+        # Don't return early: archive annotation below must still run,
+        # so "not in daily recall but exists in archive" can be surfaced.
+        # 不提前return：让下方归档标注继续执行，"日常召回没有但归档里有"才能被提示。
+        final_text = "未找到相关记忆。"
+    else:
+        final_text = "\n---\n".join(results)
 
     # --- Auto-attach recent self-cognition (I tool) ---
     try:
