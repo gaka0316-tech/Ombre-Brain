@@ -676,6 +676,8 @@
   <div class="tab" data-tab="selfknow">🪞 自我认知</div>
   <div class="tab" data-tab="anchors">⚓ 坐标系</div>
   <div class="tab" data-tab="gallery">🖼 图库</div>
+  <div class="tab" data-tab="reminders">⏰ 备忘</div>
+  <div class="tab" data-tab="darkroom">🌑 暗房</div>
   <div class="tab" data-tab="config">配置</div>
   <div class="tab" data-tab="import">导入</div>
   <div class="tab" data-tab="settings">设置</div>
@@ -745,6 +747,20 @@
 <div class="content" id="anchors-view" style="display:none">
   <div style="margin-bottom:16px;color:var(--text-dim);font-size:13px;">坐标系桶（anchor）。重要但刻意不在默认 breath 浮现，搜索时仍能找到。与 pinned 互斥。上限 24 个。通过 <code>anchor(bucket_id)</code> 设置，<code>release(bucket_id)</code> 释放。</div>
   <div id="anchors-list">
+    <div class="loading">加载中…</div>
+  </div>
+</div>
+
+<div class="content" id="reminders-view" style="display:none">
+  <div style="margin-bottom:16px;color:var(--text-dim);font-size:13px;">独立照顾备忘，不进记忆桶。通过 <code>reminder_create</code> 创建，<code>reminder_update(id, status="done")</code> 完成。</div>
+  <div id="reminders-list">
+    <div class="loading">加载中…</div>
+  </div>
+</div>
+
+<div class="content" id="darkroom-view" style="display:none">
+  <div style="margin-bottom:16px;color:var(--text-dim);font-size:13px;">私密反思暗房。通过 <code>darkroom_enter</code> 写入，<code>darkroom_view</code> 查看。锁门期间内容不可见。</div>
+  <div id="darkroom-list">
     <div class="loading">加载中…</div>
   </div>
 </div>
@@ -1386,6 +1402,8 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.getElementById('selfknow-view').style.display = target === 'selfknow' ? '' : 'none';
     document.getElementById('anchors-view').style.display = target === 'anchors' ? '' : 'none';
     document.getElementById('gallery-view').style.display = target === 'gallery' ? '' : 'none';
+    document.getElementById('reminders-view').style.display = target === 'reminders' ? '' : 'none';
+    document.getElementById('darkroom-view').style.display = target === 'darkroom' ? '' : 'none';
     document.getElementById('breath-view').style.display = target === 'breath' ? '' : 'none';
     document.getElementById('network-view').style.display = target === 'network' ? '' : 'none';
     document.getElementById('config-view').style.display = target === 'config' ? '' : 'none';
@@ -1398,6 +1416,8 @@ document.querySelectorAll('.tab').forEach(tab => {
     if (target === 'selfknow') renderSelfknow();
     if (target === 'anchors') renderAnchors();
     if (target === 'gallery') renderGallery();
+    if (target === 'reminders') renderReminders();
+    if (target === 'darkroom') renderDarkroom();
     if (target === 'network' && !networkLoaded) loadNetwork();
     if (target === 'config') loadConfig();
     if (target === 'import') { pollImportStatus(); loadImportResults(); }
@@ -1816,6 +1836,99 @@ function renderDonePlans(el) {
 function loadMoreDonePlans() {
   donePlansPage++;
   renderDonePlans();
+}
+
+function renderReminders() {
+  var el = document.getElementById('reminders-list');
+  el.innerHTML = '<div class="loading">加载中…</div>';
+  authFetch(BASE + '/api/reminders?status=all')
+    .then(function(r) { if (!r || !r.ok) throw new Error('加载失败'); return r.json(); })
+    .then(function(items) {
+      if (!items.length) {
+        el.innerHTML = '<div class="loading" style="color:var(--text-dim);">还没有备忘。用 <code>reminder_create</code> 创建第一个吧 ⏰</div>';
+        return;
+      }
+      var active = items.filter(function(r) { return r.status === 'active'; });
+      var done = items.filter(function(r) { return r.status !== 'active'; });
+      var html = '';
+      if (active.length) {
+        html += '<div style="margin-bottom:8px;font-size:14px;font-weight:600;color:var(--text);">⏰ 待办（' + active.length + '）</div>';
+        active.forEach(function(r) {
+          var due = r.due_at ? ' · 截止: ' + r.due_at : '';
+          html += '<div style="background:var(--surface);border:1px solid var(--accent);border-radius:10px;padding:16px;margin-bottom:10px;">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+              '<div style="font-size:14px;font-weight:500;color:var(--text);">⏰ ' + esc(r.title) + '</div>' +
+              '<div style="font-size:11px;color:var(--text-dim);">' + (r.created || '').substring(0, 10) + due + '</div>' +
+            '</div>' +
+            (r.content ? '<div style="font-size:13px;color:var(--text);margin-top:8px;line-height:1.6;">' + esc(r.content) + '</div>' : '') +
+            '<div style="font-size:11px;color:var(--text-dim);margin-top:6px;">ID: ' + r.id + '</div>' +
+          '</div>';
+        });
+      }
+      if (done.length) {
+        html += '<div style="margin-top:16px;margin-bottom:8px;font-size:14px;font-weight:600;color:var(--text-dim);">✓ 已完成（' + done.length + '）</div>';
+        done.forEach(function(r) {
+          html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px;opacity:0.6;">' +
+            '<div style="font-size:13px;color:var(--text-dim);">✓ ' + esc(r.title) + ' · ' + (r.created || '').substring(0, 10) + '</div>' +
+          '</div>';
+        });
+      }
+      el.innerHTML = html;
+    })
+    .catch(function(e) { el.innerHTML = '<div class="loading" style="color:red;">加载失败: ' + e.message + '</div>'; });
+}
+
+function renderDarkroom() {
+  var el = document.getElementById('darkroom-list');
+  el.innerHTML = '<div class="loading">加载中…</div>';
+  authFetch(BASE + '/api/darkroom')
+    .then(function(r) { if (!r || !r.ok) throw new Error('加载失败'); return r.json(); })
+    .then(function(rooms) {
+      if (!rooms.length) {
+        el.innerHTML = '<div class="loading" style="color:var(--text-dim);">暗房空空如也。用 <code>darkroom_enter</code> 写第一条反思吧 🌑</div>';
+        return;
+      }
+      var html = '<div style="margin-bottom:12px;color:var(--text-dim);font-size:13px;">共 ' + rooms.length + ' 间暗房</div>';
+      rooms.forEach(function(r) {
+        var lockIcon = r.locked ? '🔒' : '🔓';
+        var lockText = r.locked ? '锁至 ' + (r.unlock_at || '').substring(0, 16) : '已解锁';
+        var mood = r.mood ? ' · ' + r.mood : '';
+        var tags = (r.tags || []).length ? ' · ' + r.tags.join(', ') : '';
+        html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px;cursor:pointer;" onclick="viewDarkroom(\'' + r.room_id + '\')">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+            '<div style="font-size:14px;font-weight:500;color:var(--text);">' + lockIcon + ' 房间 ' + r.room_id.substring(0, 8) + '</div>' +
+            '<div style="font-size:11px;color:var(--text-dim);">' + (r.created || '').substring(0, 10) + ' · ' + r.notes_count + '条笔记</div>' +
+          '</div>' +
+          '<div style="font-size:12px;color:var(--text-dim);margin-top:6px;">' + lockText + mood + tags + '</div>' +
+        '</div>';
+      });
+      el.innerHTML = html;
+    })
+    .catch(function(e) { el.innerHTML = '<div class="loading" style="color:red;">加载失败: ' + e.message + '</div>'; });
+}
+
+function viewDarkroom(roomId) {
+  var el = document.getElementById('darkroom-list');
+  authFetch(BASE + '/api/darkroom/view?id=' + roomId)
+    .then(function(r) { if (!r || !r.ok) throw new Error('加载失败'); return r.json(); })
+    .then(function(data) {
+      if (data.locked) {
+        alert('🔒 这间暗房还没到开门时间。\n解锁时间: ' + (data.unlock_at || ''));
+        return;
+      }
+      if (data.error) { alert(data.error); return; }
+      var html = '<div style="margin-bottom:12px;"><button onclick="renderDarkroom()" style="padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;">← 返回列表</button></div>';
+      if (data.mood) html += '<div style="font-size:13px;color:var(--text-dim);margin-bottom:8px;">心境: ' + esc(data.mood) + '</div>';
+      if ((data.tags || []).length) html += '<div style="font-size:13px;color:var(--text-dim);margin-bottom:12px;">标签: ' + data.tags.join(', ') + '</div>';
+      (data.notes || []).forEach(function(n) {
+        html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px;">' +
+          '<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">' + (n.created || '').substring(0, 16) + '</div>' +
+          '<div style="font-size:14px;color:var(--text);line-height:1.7;white-space:pre-wrap;">' + esc(n.content || '') + '</div>' +
+        '</div>';
+      });
+      el.innerHTML = html;
+    })
+    .catch(function(e) { alert('加载失败: ' + e.message); });
 }
 
 function renderSelfknow() {
