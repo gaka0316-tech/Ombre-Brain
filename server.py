@@ -3628,6 +3628,50 @@ async def api_system_status(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+# --- Reminder API for dashboard ---
+@mcp.custom_route("/api/reminders", methods=["GET"])
+async def api_reminders(request):
+    """List reminders for dashboard display."""
+    from starlette.responses import JSONResponse
+    err = _require_auth(request)
+    if err: return err
+    try:
+        status = request.query_params.get("status", "all")
+        items = reminder_store.list(status=status, limit=100)
+        return JSONResponse(items)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# --- Darkroom API for dashboard ---
+@mcp.custom_route("/api/darkroom", methods=["GET"])
+async def api_darkroom(request):
+    """List darkroom rooms for dashboard display."""
+    from starlette.responses import JSONResponse
+    err = _require_auth(request)
+    if err: return err
+    try:
+        rooms = darkroom_store.rooms(limit=50, visibility="all")
+        return JSONResponse(rooms)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@mcp.custom_route("/api/darkroom/view", methods=["GET"])
+async def api_darkroom_view(request):
+    """View a specific darkroom room content."""
+    from starlette.responses import JSONResponse
+    err = _require_auth(request)
+    if err: return err
+    try:
+        room_id = request.query_params.get("id", "")
+        if not room_id:
+            return JSONResponse({"error": "missing id"}, status_code=400)
+        result = darkroom_store.view(room_id)
+        return JSONResponse(result)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 # --- Entry point / 启动入口 ---
 if __name__ == "__main__":
     transport = config.get("transport", "stdio")
