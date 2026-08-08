@@ -216,3 +216,25 @@ class DarkroomStore:
         data["rooms"] = new_rooms
         self._save(data)
         return {"status": "deleted", "room_id": room_id}
+
+    def update(self, room_id: str, *, mood: str = None, tags: str = None, unlock_at: str = None) -> dict:
+        """Update a room's metadata (mood, tags, unlock_at). None = don't change."""
+        data = self._load()
+        target = None
+        for room in data.get("rooms", []):
+            if room.get("id") == room_id:
+                target = room
+                break
+        if not target:
+            return {"error": "room not found"}
+
+        if mood is not None:
+            target["mood"] = mood.strip()
+        if tags is not None:
+            target["tags"] = [t.strip() for t in tags.split(",") if t.strip()] if tags.strip() else []
+        if unlock_at is not None:
+            target["unlock_at"] = unlock_at.strip()
+        target["updated"] = datetime.now().isoformat()
+
+        self._save(data)
+        return {"status": "updated", "room_id": room_id}
