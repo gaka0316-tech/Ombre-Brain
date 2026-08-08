@@ -3645,6 +3645,46 @@ async def api_reminders(request):
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
+@mcp.custom_route("/api/reminders/update", methods=["POST"])
+async def api_reminders_update(request):
+    """Update a reminder via dashboard."""
+    from starlette.responses import JSONResponse
+    err = _require_auth(request)
+    if err: return err
+    try:
+        body = await request.json()
+        rid = body.get("id", "")
+        if not rid:
+            return JSONResponse({"error": "missing id"}, status_code=400)
+        result = reminder_store.update(
+            rid,
+            title=body.get("title", ""),
+            content=body.get("content", ""),
+            status=body.get("status", ""),
+            due_at=body.get("due_at", ""),
+        )
+        if not result:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        return JSONResponse(result)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@mcp.custom_route("/api/reminders/delete", methods=["POST"])
+async def api_reminders_delete(request):
+    """Delete a reminder via dashboard."""
+    from starlette.responses import JSONResponse
+    err = _require_auth(request)
+    if err: return err
+    try:
+        body = await request.json()
+        rid = body.get("id", "")
+        if not rid:
+            return JSONResponse({"error": "missing id"}, status_code=400)
+        ok = reminder_store.delete(rid)
+        return JSONResponse({"ok": ok}) if ok else JSONResponse({"error": "not found"}, status_code=404)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 
 # --- Darkroom API for dashboard ---
 @mcp.custom_route("/api/darkroom", methods=["GET"])
@@ -3670,6 +3710,47 @@ async def api_darkroom_view(request):
         if not room_id:
             return JSONResponse({"error": "missing id"}, status_code=400)
         result = darkroom_store.view(room_id)
+        return JSONResponse(result)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@mcp.custom_route("/api/darkroom/update", methods=["POST"])
+async def api_darkroom_update(request):
+    """Update a darkroom room's metadata via dashboard."""
+    from starlette.responses import JSONResponse
+    err = _require_auth(request)
+    if err: return err
+    try:
+        body = await request.json()
+        room_id = body.get("id", "")
+        if not room_id:
+            return JSONResponse({"error": "missing id"}, status_code=400)
+        result = darkroom_store.update(
+            room_id,
+            mood=body.get("mood") if "mood" in body else None,
+            tags=body.get("tags") if "tags" in body else None,
+            unlock_at=body.get("unlock_at") if "unlock_at" in body else None,
+        )
+        if result.get("error"):
+            return JSONResponse(result, status_code=404)
+        return JSONResponse(result)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+@mcp.custom_route("/api/darkroom/delete", methods=["POST"])
+async def api_darkroom_delete(request):
+    """Delete a darkroom room via dashboard."""
+    from starlette.responses import JSONResponse
+    err = _require_auth(request)
+    if err: return err
+    try:
+        body = await request.json()
+        room_id = body.get("id", "")
+        if not room_id:
+            return JSONResponse({"error": "missing id"}, status_code=400)
+        result = darkroom_store.delete(room_id, confirm="DELETE")
+        if result.get("error"):
+            return JSONResponse(result, status_code=400)
         return JSONResponse(result)
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
