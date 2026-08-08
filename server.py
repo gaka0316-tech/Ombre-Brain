@@ -46,6 +46,7 @@ import random
 import logging
 import asyncio
 import hashlib
+from datetime import datetime
 import hmac
 import secrets
 import time
@@ -113,7 +114,7 @@ import_engine = ImportEngine(config, bucket_mgr, dehydrator, embedding_engine)  
 
 # --- Initialize reminder & darkroom stores ---
 from reminder_store import ReminderStore
-from darkroom_store import DarkroomStore
+from darkroom_store import DarkroomStore, _parse_lock_for
 _state_dir = os.path.join(os.path.abspath(config.get("buckets_dir", "buckets")), "_state")
 os.makedirs(_state_dir, exist_ok=True)
 reminder_store = ReminderStore(os.path.join(_state_dir, "reminders.json"))
@@ -436,6 +437,25 @@ async def dream_hook(request):
 # Shared by hold and grow to avoid duplicate logic
 # hold 和 grow 共用，避免重复逻辑
 # =============================================================
+def _letter_lock_info(meta: dict) -> str:
+    """
+    If this bucket is a time-locked letter still sealed, return its unlock_at; else ''.
+    统一的信件时间锁检查：锁着返回解锁时间，没锁/已到期返回空串。
+    read_bucket / breath渲染 / 随机浮现 / letter_read 四处共用，保证锁不可绕过。
+    """
+    if meta.get("event_type") != "letter":
+        return ""
+    unlock_at = str(meta.get("unlock_at", "") or "")
+    if not unlock_at:
+        return ""
+    try:
+        if datetime.fromisoformat(unlock_at) > datetime.now():
+            return unlock_at
+    except (ValueError, TypeError):
+        pass
+    return ""
+
+
 async def _merge_or_create(
     content: str,
     tags: list,
@@ -496,7 +516,7 @@ async def _merge_or_create(
                     await embedding_engine.generate_and_store(bucket["id"], merged)
                 except Exception:
                     pass
-                return bucket["metadata"].get("name", bucket["id"]), True
+                return bucket["metadata"].get("name", bucket["id"]), True, bucket["id"]
             except Exception as e:
                 logger.warning(f"Merge failed, creating new / 合并失败，新建: {e}")
 
@@ -518,7 +538,7 @@ async def _merge_or_create(
         await embedding_engine.generate_and_store(bucket_id, content)
     except Exception:
         pass
-    return bucket_id, False
+    return bucket_id, False, bucket_id
 
 
 # =============================================================
@@ -898,6 +918,15 @@ async def _breath_dispatch(
         if token_used >= max_tokens:
             break
         try:
+            # --- Sealed letter: show envelope only, never the content ---
+            # --- 锁着的信只显示信封，绝不显示内容 ---
+            locked_until = _letter_lock_info(bucket["metadata"])
+            if locked_until:
+                results.append(
+                    f"🔒 [bucket_id:{bucket['id']}] {bucket['metadata'].get('name', '一封信')}"
+                    f"（时间锁：{locked_until[:16]} 后可拆）"
+                )
+                continue
             clean_meta = {k: v for k, v in bucket["metadata"].items() if k != "tags"}
             # --- Memory reconstruction: shift displayed valence by current mood ---
             # --- 记忆重构：根据当前情绪微调展示层 valence（±0.1）---
@@ -938,6 +967,7 @@ async def _breath_dispatch(
                 b for b in all_buckets
                 if b["id"] not in matched_ids
                 and decay_engine.calculate_score(b["metadata"]) < 2.0
+                and not _letter_lock_info(b["metadata"])
             ]
             if low_weight:
                 drifted = random.sample(low_weight, min(random.randint(1, 3), len(low_weight)))
@@ -1213,6 +1243,38 @@ async def darkroom_delete(
 
 
 # =============================================================
+# Tool: source_read — Read original source text behind a memory
+# 工具：source_read — 回到记忆诞生的现场
+# =============================================================
+@mcp.tool()
+async def source_read(bucket_id: str) -> str:
+    """读取grow拆分记忆时保存的原始日记全文。传拆分产生的bucket_id，返回压缩前的原文——回到那条记忆真正诞生的现场。短内容和早期记忆没有原文。"""
+    if not bucket_id or not bucket_id.strip():
+        return "请提供有效的 bucket_id。"
+
+    bucket = await bucket_mgr.get(bucket_id)
+    if not bucket:
+        return f"未找到记忆桶: {bucket_id}"
+
+    source_id = str(bucket.get("metadata", {}).get("source_id", "") or "")
+    if not source_id:
+        return "这条记忆没有保存原文（短内容快速路径或 2026.8.8 之前的记忆没有原文证据）。"
+
+    source_path = os.path.join(bucket_mgr.base_dir, "_sources", f"{source_id}.txt")
+    if not os.path.exists(source_path):
+        return f"原文文件已丢失: {source_id}"
+
+    try:
+        with open(source_path, "r", encoding="utf-8") as f:
+            raw = f.read()
+    except OSError as e:
+        return f"原文读取失败: {e}"
+
+    bucket_name = bucket.get("metadata", {}).get("name", bucket_id[:12])
+    return f"=== 原文现场 📜 ===\n记忆桶: {bucket_name} ({bucket_id})\n\n{raw}"
+
+
+# =============================================================
 # Tool: read_bucket — Read a bucket by ID
 # 工具：read_bucket — 按ID精确读取记忆桶
 # =============================================================
@@ -1227,6 +1289,15 @@ async def read_bucket(bucket_id: str) -> str:
         return f"未找到记忆桶: {bucket_id}"
 
     meta = bucket.get("metadata", {})
+    # --- Sealed letter: envelope only ---
+    locked_until = _letter_lock_info(meta)
+    if locked_until:
+        return (
+            f"🔒 {meta.get('name', '一封信')}\n"
+            f"这是一封带时间锁的信，还没到拆信时间。\n"
+            f"写于：{meta.get('created', '')[:10]}\n"
+            f"解锁：{locked_until[:16]}"
+        )
     parts = [f"=== 记忆桶 {bucket_id} ==="]
     parts.append(f"名称: {meta.get('name', '未命名')}")
     parts.append(f"类型: {meta.get('type', 'dynamic')}")
@@ -1247,6 +1318,8 @@ async def read_bucket(bucket_id: str) -> str:
         parts.append(f"图片: {len(meta.get('media', []))} 张")
     if meta.get("source"):
         parts.append(f"来源: {meta.get('source')}")
+    if meta.get("source_id"):
+        parts.append(f"原文: 有 📜（source_read('{bucket_id}') 可回到诞生现场）")
 
     # Comments / 年轮
     comments = meta.get("comments", [])
@@ -1490,7 +1563,7 @@ async def hold(
         return f"📌钉选→{bucket_id} {','.join(domain)}"
 
     # --- Step 2: merge or create / 合并或新建 ---
-    result_name, is_merged = await _merge_or_create(
+    result_name, is_merged, _mc_bid = await _merge_or_create(
         content=content,
         tags=all_tags,
         importance=importance,
@@ -1598,7 +1671,7 @@ async def grow(content: str) -> str:
                 "domain": ["未分类"], "valence": 0.5, "arousal": 0.3,
                 "tags": [], "suggested_name": "",
             }
-        result_name, is_merged = await _merge_or_create(
+        result_name, is_merged, _mc_bid = await _merge_or_create(
             content=content.strip(),
             tags=analysis.get("tags", []),
             importance=analysis.get("importance", 5) if isinstance(analysis.get("importance"), int) else 5,
@@ -1620,6 +1693,20 @@ async def grow(content: str) -> str:
     if not items:
         return "内容为空或整理失败。"
 
+    # --- Source Read: save original text before splitting ---
+    # --- 原文证据：拆分前保存原始日记，桶里记 source_id 可随时找回 ---
+    source_id = ""
+    try:
+        import uuid as _uuid
+        source_id = _uuid.uuid4().hex[:12]
+        sources_dir = os.path.join(bucket_mgr.base_dir, "_sources")
+        os.makedirs(sources_dir, exist_ok=True)
+        with open(os.path.join(sources_dir, f"{source_id}.txt"), "w", encoding="utf-8") as f:
+            f.write(f"# source_id: {source_id}\n# saved: {datetime.now().isoformat()}\n# chars: {len(content)}\n---\n{content}")
+    except Exception as e:
+        logger.warning(f"Source save failed / 原文保存失败: {e}")
+        source_id = ""
+
     results = []
     created = 0
     merged = 0
@@ -1628,7 +1715,7 @@ async def grow(content: str) -> str:
     # --- 逐条合并或新建（单条失败不影响其他）---
     for item in items:
         try:
-            result_name, is_merged = await _merge_or_create(
+            result_name, is_merged, item_bid = await _merge_or_create(
                 content=item["content"],
                 tags=item.get("tags", []),
                 importance=item.get("importance", 5),
@@ -1637,6 +1724,12 @@ async def grow(content: str) -> str:
                 arousal=item.get("arousal", 0.3),
                 name=item.get("name", ""),
             )
+            # Link bucket to its original source text
+            if source_id and item_bid:
+                try:
+                    await bucket_mgr.update(item_bid, source_id=source_id)
+                except Exception:
+                    pass
 
             if is_merged:
                 results.append(f"📎{result_name}")
@@ -1726,6 +1819,16 @@ async def trace(
     bucket = await bucket_mgr.get(bucket_id)
     if not bucket:
         return f"未找到记忆桶: {bucket_id}"
+
+    # --- Letters are immutable: can be torn up (delete), never rewritten ---
+    # --- 信不涂改：可以撕掉重写(delete)，不能修改正文 ---
+    if bucket.get("metadata", {}).get("event_type") == "letter" and (
+        content or old_str
+    ):
+        return (
+            "✉️ 信件正文不可涂改——写下时是什么样，就永远是什么样。\n"
+            "写错了可以 trace(bucket_id, delete=True) 撕掉重写一封。"
+        )
 
     # --- Collect only fields actually passed / 只收集用户实际传入的字段 ---
     updates = {}
@@ -2114,14 +2217,23 @@ async def letter_write(
     content: str,
     to: str = "下一个我",
     title: str = "",
+    lock_for: str = "",
 ) -> str:
-    """写信——给下一个我、给宝儿、或给任何你想说的人。信件永久保留，不压缩不衰减，原文完整保存。"""
+    """写信——给下一个我、给宝儿、或给任何你想说的人。信件永久保留，不压缩不衰减，原文完整保存。lock_for可选时间锁如"6h"/"3d"/"30d"，锁定期间letter_read只能看到信封，到期自动可拆。"""
     await decay_engine.ensure_started()
 
     if not content or not content.strip():
         return "信的内容为空，无法寄出。"
 
     letter_title = title.strip() if title.strip() else f"致{to}的信"
+
+    # --- Time lock / 时间锁 ---
+    unlock_at = ""
+    lock_delta = _parse_lock_for(lock_for) if lock_for else None
+    if lock_for and not lock_delta:
+        return f"时间锁格式无法解析: {lock_for}（支持如 6h / 3d / 30d）"
+    if lock_delta:
+        unlock_at = (datetime.now() + lock_delta).isoformat()
 
     bucket_id = await bucket_mgr.create(
         content=content,
@@ -2135,6 +2247,8 @@ async def letter_write(
         source="letter_write",
         event_type="letter",
     )
+    if unlock_at:
+        await bucket_mgr.update(bucket_id, unlock_at=unlock_at)
     # --- Generate embedding for letter ---
     try:
         await embedding_engine.generate_and_store(bucket_id, content)
@@ -2142,11 +2256,12 @@ async def letter_write(
         pass
 
     await _fire_webhook("letter_write", {"to": to, "title": letter_title, "bucket_id": bucket_id})
+    lock_line = f"\n🔒 时间锁：{unlock_at[:16]} 后可拆" if unlock_at else ""
     return (
         f"✉️ 信已写好并永久保存。\n"
         f"收件人：{to}\n"
         f"标题：{letter_title}\n"
-        f"桶ID：{bucket_id}"
+        f"桶ID：{bucket_id}{lock_line}"
     )
 
 
@@ -2208,6 +2323,17 @@ async def letter_read(
             (t.replace("致:", "") for t in tags if t.startswith("致:")),
             "未知"
         )
+        # --- Time lock check (shared helper) / 时间锁检查（统一函数）---
+        locked_until = _letter_lock_info(meta)
+        if locked_until:
+            parts.append(
+                f"🔒 {meta.get('name', b['id'])}\n"
+                f"致：{to_tag} | 写于：{meta.get('created', '')[: 10]}\n"
+                f"ID: {b['id']}\n"
+                f"---\n"
+                f"（这封信还锁着，{locked_until[:16]} 后可拆）"
+            )
+            continue
         parts.append(
             f"✉️ {meta.get('name', b['id'])}\n"
             f"致：{to_tag} | 日期：{meta.get('created', '')[: 10]}\n"
@@ -2291,7 +2417,7 @@ async def I(
     read: bool = False,
     limit: int = 20,
 ) -> str:
-    """自我认知日志。传入content写一条自我认知（如"我在她沉默的时候会焦虑"），aspect可标维度(nature/values/patterns/limits/becoming/uncertainty/stance)。不传content或read=True读取已有条目。不参与breath浮现，breath末尾自动附最近3条。"""
+    """自我认知日志。传入content写一条自我认知（如"我在她沉默的时候会焦虑"），aspect可标维度(nature/values/patterns/limits/becoming/uncertainty/stance)。写入前先用read=True看已有条目：新认知与旧认知矛盾时不要直接落地，先在对话或暗房里碰撞，想清楚了再写——对自我的认知要经过碰撞才能得出结论。不传content或read=True读取已有条目。不参与breath浮现，breath末尾自动附最近3条。"""
     await decay_engine.ensure_started()
 
     # --- Read mode ---
