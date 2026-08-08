@@ -1838,6 +1838,7 @@ function loadMoreDonePlans() {
   renderDonePlans();
 }
 
+var _remindersCache = {};
 function renderReminders() {
   var el = document.getElementById('reminders-list');
   el.innerHTML = '<div class="loading">加载中…</div>';
@@ -1848,20 +1849,26 @@ function renderReminders() {
         el.innerHTML = '<div class="loading" style="color:var(--text-dim);">还没有备忘。用 <code>reminder_create</code> 创建第一个吧 ⏰</div>';
         return;
       }
+      _remindersCache = {};
+      items.forEach(function(r) { _remindersCache[r.id] = r; });
       var active = items.filter(function(r) { return r.status === 'active'; });
       var done = items.filter(function(r) { return r.status !== 'active'; });
       var html = '';
       if (active.length) {
         html += '<div style="margin-bottom:8px;font-size:14px;font-weight:600;color:var(--text);">⏰ 待办（' + active.length + '）</div>';
         active.forEach(function(r) {
-          var due = r.due_at ? ' · 截止: ' + r.due_at : '';
+          var due = r.due_at ? ' · 截止: ' + esc(r.due_at) : '';
           html += '<div style="background:var(--surface);border:1px solid var(--accent);border-radius:10px;padding:16px;margin-bottom:10px;">' +
             '<div style="display:flex;justify-content:space-between;align-items:center;">' +
               '<div style="font-size:14px;font-weight:500;color:var(--text);">⏰ ' + esc(r.title) + '</div>' +
               '<div style="font-size:11px;color:var(--text-dim);">' + (r.created || '').substring(0, 10) + due + '</div>' +
             '</div>' +
-            (r.content ? '<div style="font-size:13px;color:var(--text);margin-top:8px;line-height:1.6;">' + esc(r.content) + '</div>' : '') +
-            '<div style="font-size:11px;color:var(--text-dim);margin-top:6px;">ID: ' + r.id + '</div>' +
+            (r.content ? '<div style="font-size:13px;color:var(--text);margin-top:8px;line-height:1.6;white-space:pre-wrap;">' + esc(r.content) + '</div>' : '') +
+            '<div style="display:flex;gap:10px;margin-top:10px;font-size:12px;">' +
+              '<span style="cursor:pointer;color:var(--positive);" onclick="reminderAction(\'' + r.id + '\',\'done\')">✓ 完成</span>' +
+              '<span style="cursor:pointer;color:var(--accent);" onclick="reminderEdit(\'' + r.id + '\')">✏️ 编辑</span>' +
+              '<span style="cursor:pointer;color:var(--negative);" onclick="reminderDelete(\'' + r.id + '\')">🗑 删除</span>' +
+            '</div>' +
           '</div>';
         });
       }
@@ -1869,7 +1876,10 @@ function renderReminders() {
         html += '<div style="margin-top:16px;margin-bottom:8px;font-size:14px;font-weight:600;color:var(--text-dim);">✓ 已完成（' + done.length + '）</div>';
         done.forEach(function(r) {
           html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px;opacity:0.6;">' +
-            '<div style="font-size:13px;color:var(--text-dim);">✓ ' + esc(r.title) + ' · ' + (r.created || '').substring(0, 10) + '</div>' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+              '<div style="font-size:13px;color:var(--text-dim);">✓ ' + esc(r.title) + ' · ' + (r.created || '').substring(0, 10) + '</div>' +
+              '<span style="cursor:pointer;color:var(--negative);font-size:11px;" onclick="reminderDelete(\'' + r.id + '\')">🗑</span>' +
+            '</div>' +
           '</div>';
         });
       }
@@ -1878,6 +1888,7 @@ function renderReminders() {
     .catch(function(e) { el.innerHTML = '<div class="loading" style="color:red;">加载失败: ' + e.message + '</div>'; });
 }
 
+var _darkroomCache = {};
 function renderDarkroom() {
   var el = document.getElementById('darkroom-list');
   el.innerHTML = '<div class="loading">加载中…</div>';
@@ -1888,18 +1899,26 @@ function renderDarkroom() {
         el.innerHTML = '<div class="loading" style="color:var(--text-dim);">暗房空空如也。用 <code>darkroom_enter</code> 写第一条反思吧 🌑</div>';
         return;
       }
+      _darkroomCache = {};
+      rooms.forEach(function(r) { _darkroomCache[r.room_id] = r; });
       var html = '<div style="margin-bottom:12px;color:var(--text-dim);font-size:13px;">共 ' + rooms.length + ' 间暗房</div>';
       rooms.forEach(function(r) {
         var lockIcon = r.locked ? '🔒' : '🔓';
-        var lockText = r.locked ? '锁至 ' + (r.unlock_at || '').substring(0, 16) : '已解锁';
-        var mood = r.mood ? ' · ' + r.mood : '';
-        var tags = (r.tags || []).length ? ' · ' + r.tags.join(', ') : '';
-        html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px;cursor:pointer;" onclick="viewDarkroom(\'' + r.room_id + '\')">' +
-          '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+        var lockText = r.locked ? '锁至 ' + esc((r.unlock_at || '').substring(0, 16)) : '已解锁';
+        var mood = r.mood ? ' · ' + esc(r.mood) : '';
+        var tags = (r.tags || []).length ? ' · ' + esc(r.tags.join(', ')) : '';
+        html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px;">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" onclick="viewDarkroom(\'' + r.room_id + '\')">' +
             '<div style="font-size:14px;font-weight:500;color:var(--text);">' + lockIcon + ' 房间 ' + r.room_id.substring(0, 8) + '</div>' +
             '<div style="font-size:11px;color:var(--text-dim);">' + (r.created || '').substring(0, 10) + ' · ' + r.notes_count + '条笔记</div>' +
           '</div>' +
-          '<div style="font-size:12px;color:var(--text-dim);margin-top:6px;">' + lockText + mood + tags + '</div>' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">' +
+            '<div style="font-size:12px;color:var(--text-dim);">' + lockText + mood + tags + '</div>' +
+            '<div style="display:flex;gap:10px;">' +
+              '<span style="cursor:pointer;color:var(--accent);font-size:12px;" onclick="darkroomEdit(\'' + r.room_id + '\')">✏️ 编辑</span>' +
+              '<span style="cursor:pointer;color:var(--negative);font-size:12px;" onclick="darkroomDelete(\'' + r.room_id + '\')">🗑 删除</span>' +
+            '</div>' +
+          '</div>' +
         '</div>';
       });
       el.innerHTML = html;
@@ -1929,6 +1948,70 @@ function viewDarkroom(roomId) {
       el.innerHTML = html;
     })
     .catch(function(e) { alert('加载失败: ' + e.message); });
+}
+
+function reminderAction(id, status) {
+  authFetch(BASE + '/api/reminders/update', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({id: id, status: status})
+  }).then(function(r) { if (r && r.ok) renderReminders(); else alert('操作失败'); })
+    .catch(function(e) { alert('错误: ' + e.message); });
+}
+
+function reminderEdit(id) {
+  var r = _remindersCache[id];
+  if (!r) { alert('数据已过期，请刷新'); return; }
+  var title = prompt('标题：', r.title || '');
+  if (title === null) return;
+  var content = prompt('内容：', r.content || '');
+  if (content === null) content = r.content || '';
+  var due = prompt('截止时间：', r.due_at || '');
+  if (due === null) due = r.due_at || '';
+  authFetch(BASE + '/api/reminders/update', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({id: id, title: title, content: content, due_at: due})
+  }).then(function(r) { if (r && r.ok) renderReminders(); else alert('编辑失败'); })
+    .catch(function(e) { alert('错误: ' + e.message); });
+}
+
+function reminderDelete(id) {
+  if (!confirm('确定删除这条备忘？')) return;
+  authFetch(BASE + '/api/reminders/delete', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({id: id})
+  }).then(function(r) { if (r && r.ok) renderReminders(); else alert('删除失败'); })
+    .catch(function(e) { alert('错误: ' + e.message); });
+}
+
+function darkroomDelete(roomId) {
+  if (!confirm('确定删除这间暗房及全部笔记？此操作不可撤销。')) return;
+  authFetch(BASE + '/api/darkroom/delete', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({id: roomId})
+  }).then(function(r) { if (r && r.ok) renderDarkroom(); else alert('删除失败'); })
+    .catch(function(e) { alert('错误: ' + e.message); });
+}
+
+function darkroomEdit(roomId) {
+  var r = _darkroomCache[roomId];
+  if (!r) { alert('数据已过期，请刷新'); return; }
+  var mood = prompt('心境：', r.mood || '');
+  if (mood === null) return;
+  var tags = prompt('标签（逗号分隔）：', (r.tags || []).join(', '));
+  if (tags === null) tags = (r.tags || []).join(', ');
+  var oldUnlock = (r.unlock_at && r.unlock_at !== 'unlocked') ? r.unlock_at : '';
+  var unlock = prompt('查看时间（ISO格式，如 2026-08-08T08:00:00，留空=立即解锁）：', oldUnlock);
+  if (unlock === null) unlock = oldUnlock;
+  authFetch(BASE + '/api/darkroom/update', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({id: roomId, mood: mood, tags: tags, unlock_at: unlock})
+  }).then(function(r) { if (r && r.ok) renderDarkroom(); else alert('编辑失败'); })
+    .catch(function(e) { alert('错误: ' + e.message); });
 }
 
 function renderSelfknow() {
