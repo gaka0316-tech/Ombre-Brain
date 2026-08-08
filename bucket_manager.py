@@ -297,6 +297,10 @@ class BucketManager:
             post["importance"] = max(1, min(10, int(kwargs["importance"])))
         if "domain" in kwargs:
             post["domain"] = kwargs["domain"]
+        if "unlock_at" in kwargs:
+            post["unlock_at"] = kwargs["unlock_at"]
+        if "source_id" in kwargs:
+            post["source_id"] = kwargs["source_id"]
         if "valence" in kwargs:
             post["valence"] = max(0.0, min(1.0, float(kwargs["valence"])))
         if "arousal" in kwargs:
