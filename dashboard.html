@@ -1748,10 +1748,25 @@ function renderLettersPage(el) {
   var hasMore = end < allLetters.length;
   var remaining = allLetters.length - end;
   var html = '<div style="margin-bottom:12px;color:var(--text-dim);font-size:13px;">共 ' + allLetters.length + ' 封信</div>';
+  var nowUtc = new Date().toISOString().slice(0, 19);
   visible.forEach(function(b) {
     var to = '—';
     (b.tags || []).forEach(function(t) { if (t.indexOf('致:') === 0) to = t.substring(2); });
     var date = b.created ? b.created.substring(0, 10) : '';
+    var isLocked = b.unlock_at && String(b.unlock_at).slice(0, 19) > nowUtc;
+    if (isLocked) {
+      // Sealed letter: envelope card, no preview, confirm before opening (master-key path)
+      // 锁着的信：信封卡，不显示预览，点击需确认（主人钥匙通道）
+      html += '<div style="background:var(--surface);border:1px dashed var(--accent);border-radius:12px;padding:20px;margin-bottom:16px;cursor:pointer;" onclick="openSealedLetter(\'' + b.id + '\')">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
+          '<div style="font-size:16px;font-weight:600;color:var(--text);">🔒 ' + esc(b.name) + '</div>' +
+          '<div style="font-size:12px;color:var(--text-dim);">' + date + '</div>' +
+        '</div>' +
+        '<div style="font-size:12px;color:var(--accent);margin-bottom:10px;">致：' + esc(to) + '</div>' +
+        '<div style="font-size:13px;color:var(--text-dim);font-style:italic;">这封信还锁着，' + String(b.unlock_at).slice(0, 10) + ' 后自动可拆 ✨</div>' +
+      '</div>';
+      return;
+    }
     html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px;cursor:pointer;" onclick="showDetail(\'' + b.id + '\')">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">' +
         '<div style="font-size:16px;font-weight:600;color:var(--text);">✉️ ' + esc(b.name) + '</div>' +
@@ -1765,6 +1780,12 @@ function renderLettersPage(el) {
     '<div class="load-more-btn" onclick="loadMoreLetters()">加载更多信件（已显示 ' + visible.length + ' / ' + allLetters.length + '，剩余 ' + remaining + ' 封）</div>' :
     '<div class="load-more-done">全部 ' + allLetters.length + ' 封信已显示 ✓</div>';
   el.innerHTML = html;
+}
+
+function openSealedLetter(id) {
+  if (confirm('🔒 这封信还锁着。\n\n提前拆开会剧透里面的惊喜哦。\n确定要用主人钥匙打开吗？')) {
+    showDetail(id);
+  }
 }
 
 function loadMoreLetters() {
