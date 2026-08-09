@@ -2566,6 +2566,7 @@ async def api_buckets(request):
                 "activation_count": meta.get("activation_count", 1),
                 "score": decay_engine.calculate_score(meta),
                 "content_preview": strip_wikilinks(b.get("content", ""))[:200],
+                "unlock_at": meta.get("unlock_at", ""),
                 "media": meta.get("media", []),
                 "meaning": meta.get("meaning", []),
                 "source": meta.get("source", ""),
@@ -2587,9 +2588,13 @@ async def api_bucket_detail(request):
     if not bucket:
         return JSONResponse({"error": "not found"}, status_code=404)
     meta = bucket.get("metadata", {})
+    # locked flag is informational only: dashboard is the owner's master-key path
+    # locked仅作前端提示；dashboard是主人的钥匙通道，正文照常返回
+    locked_until = _letter_lock_info(meta)
     return JSONResponse({
         "id": bucket["id"],
         "metadata": meta,
+        "locked": bool(locked_until),
         "content": strip_wikilinks(bucket.get("content", "")),
         "score": decay_engine.calculate_score(meta),
     })
@@ -3020,6 +3025,7 @@ async def api_search(request):
                 "valence": meta.get("valence", 0.5),
                 "arousal": meta.get("arousal", 0.3),
                 "content_preview": strip_wikilinks(b.get("content", ""))[:200],
+                "unlock_at": meta.get("unlock_at", ""),
             })
         return JSONResponse(result)
     except Exception as e:
