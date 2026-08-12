@@ -3763,6 +3763,27 @@ async def api_system_status(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@mcp.custom_route("/api/bucket/comment/delete", methods=["POST"])
+async def api_bucket_comment_delete(request):
+    """Delete a year-ring comment via dashboard (owner's key path)."""
+    from starlette.responses import JSONResponse
+    err = _require_auth(request)
+    if err: return err
+    try:
+        body = await request.json()
+        bucket_id = body.get("bucket_id", "")
+        comment_id = body.get("comment_id", "")
+        if not bucket_id or not comment_id:
+            return JSONResponse({"error": "missing bucket_id or comment_id"}, status_code=400)
+        result = await bucket_mgr.delete_comment(bucket_id, comment_id)
+        status = result.get("status", "")
+        if status == "deleted":
+            return JSONResponse({"ok": True, "comment_id": comment_id})
+        return JSONResponse({"error": status}, status_code=404 if status == "not_found" else 403)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 # --- Reminder API for dashboard ---
 @mcp.custom_route("/api/reminders", methods=["GET"])
 async def api_reminders(request):
