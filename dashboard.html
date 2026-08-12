@@ -1607,9 +1607,10 @@ function renderTimeline() {
   var years = new Set(), months = new Set(), days = new Set();
   allBuckets.forEach(function(b) {
     if (b.created) {
-      var y = b.created.substring(0, 4);
-      var m = b.created.substring(5, 7);
-      var d = b.created.substring(8, 10);
+      var tk = fmtTokyo(b.created);
+      var y = tk.substring(0, 4);
+      var m = tk.substring(5, 7);
+      var d = tk.substring(8, 10);
       if (y) years.add(y);
       if (m) months.add(m);
       if (d) days.add(d);
@@ -1650,9 +1651,10 @@ function filterTimeline() {
   });
   var filtered = sorted.filter(function(b) {
     if (!b.created) return false;
-    if (yearVal && b.created.substring(0, 4) !== yearVal) return false;
-    if (monthVal && b.created.substring(5, 7) !== monthVal) return false;
-    if (dayVal && b.created.substring(8, 10) !== dayVal) return false;
+    var tk = fmtTokyo(b.created);
+    if (yearVal && tk.substring(0, 4) !== yearVal) return false;
+    if (monthVal && tk.substring(5, 7) !== monthVal) return false;
+    if (dayVal && tk.substring(8, 10) !== dayVal) return false;
     if (searchVal) {
       var haystack = (
         (b.name || '') + ' ' +
@@ -1677,7 +1679,7 @@ function filterTimeline() {
   }
   timelineMonths = {};
   filtered.forEach(function(b) {
-    var d = b.created ? b.created.substring(0, 7) : '未知';
+    var d = b.created ? fmtTokyo(b.created).substring(0, 7) : '未知';
     if (!timelineMonths[d]) timelineMonths[d] = [];
     timelineMonths[d].push(b);
   });
@@ -1702,7 +1704,7 @@ function renderTimelinePage(el, totalCount) {
     html += '<div class="timeline-month"><h3>' + label + ' (' + timelineMonths[m].length + ')</h3>';
     timelineMonths[m].forEach(function(b) {
       var icon = b.pinned ? '📌' : b.type === 'feel' ? '🫧' : b.digested ? '🌿' : b.resolved ? '💤' : '💭';
-      var day = b.created ? b.created.substring(8, 10) + '日' : '';
+      var day = b.created ? fmtTokyo(b.created).substring(8, 10) + '日' : '';
       html += '<div class="timeline-item" onclick="showDetail(\'' + b.id + '\')">' +
         '<div class="timeline-date">' + day + '</div>' +
         '<div class="timeline-icon">' + icon + '</div>' +
@@ -1752,7 +1754,7 @@ function renderLettersPage(el) {
   visible.forEach(function(b) {
     var to = '—';
     (b.tags || []).forEach(function(t) { if (t.indexOf('致:') === 0) to = t.substring(2); });
-    var date = b.created ? b.created.substring(0, 10) : '';
+    var date = b.created ? fmtTokyo(b.created) : '';
     var isLocked = b.unlock_at && String(b.unlock_at).slice(0, 19) > nowUtc;
     if (isLocked) {
       // Sealed letter: envelope card, no preview, confirm before opening (master-key path)
@@ -1763,7 +1765,7 @@ function renderLettersPage(el) {
           '<div style="font-size:12px;color:var(--text-dim);">' + date + '</div>' +
         '</div>' +
         '<div style="font-size:12px;color:var(--accent);margin-bottom:10px;">致：' + esc(to) + '</div>' +
-        '<div style="font-size:13px;color:var(--text-dim);font-style:italic;">这封信还锁着，' + String(b.unlock_at).slice(0, 10) + ' 后自动可拆 ✨</div>' +
+        '<div style="font-size:13px;color:var(--text-dim);font-style:italic;">这封信还锁着，' + fmtTokyo(b.unlock_at) + ' 后自动可拆 ✨</div>' +
       '</div>';
       return;
     }
@@ -1818,7 +1820,7 @@ function renderPlans() {
       html += '<div style="background:var(--surface);border:1px solid var(--accent);border-radius:10px;padding:16px;margin-bottom:10px;cursor:pointer;" onclick="showDetail(\'' + b.id + '\')">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;">' +
           '<div style="font-size:14px;font-weight:500;color:var(--text);">📋 ' + esc(b.name) + '</div>' +
-          '<div style="font-size:11px;color:var(--text-dim);">' + (b.created || '').substring(0, 10) + due + '</div>' +
+          '<div style="font-size:11px;color:var(--text-dim);">' + fmtTokyo(b.created) + due + '</div>' +
         '</div>' +
         '<div style="font-size:13px;color:var(--text);margin-top:8px;line-height:1.6;">' + esc(b.content_preview || '') + '</div>' +
       '</div>';
@@ -1882,7 +1884,7 @@ function renderReminders() {
           html += '<div style="background:var(--surface);border:1px solid var(--accent);border-radius:10px;padding:16px;margin-bottom:10px;">' +
             '<div style="display:flex;justify-content:space-between;align-items:center;">' +
               '<div style="font-size:14px;font-weight:500;color:var(--text);">⏰ ' + esc(r.title) + '</div>' +
-              '<div style="font-size:11px;color:var(--text-dim);">' + (r.created || '').substring(0, 10) + due + '</div>' +
+              '<div style="font-size:11px;color:var(--text-dim);">' + fmtTokyo(r.created) + due + '</div>' +
             '</div>' +
             (r.content ? '<div style="font-size:13px;color:var(--text);margin-top:8px;line-height:1.6;white-space:pre-wrap;">' + esc(r.content) + '</div>' : '') +
             '<div style="display:flex;gap:10px;margin-top:10px;font-size:12px;">' +
@@ -1898,7 +1900,7 @@ function renderReminders() {
         done.forEach(function(r) {
           html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px;opacity:0.6;">' +
             '<div style="display:flex;justify-content:space-between;align-items:center;">' +
-              '<div style="font-size:13px;color:var(--text-dim);">✓ ' + esc(r.title) + ' · ' + (r.created || '').substring(0, 10) + '</div>' +
+              '<div style="font-size:13px;color:var(--text-dim);">✓ ' + esc(r.title) + ' · ' + fmtTokyo(r.created) + '</div>' +
               '<span style="cursor:pointer;color:var(--negative);font-size:11px;" onclick="reminderDelete(\'' + r.id + '\')">🗑</span>' +
             '</div>' +
           '</div>';
@@ -1925,13 +1927,13 @@ function renderDarkroom() {
       var html = '<div style="margin-bottom:12px;color:var(--text-dim);font-size:13px;">共 ' + rooms.length + ' 间暗房</div>';
       rooms.forEach(function(r) {
         var lockIcon = r.locked ? '🔒' : '🔓';
-        var lockText = r.locked ? '锁至 ' + esc((r.unlock_at || '').substring(0, 16)) : '已解锁';
+        var lockText = r.locked ? '锁至 ' + esc(fmtTokyo(r.unlock_at, true)) : '已解锁';
         var mood = r.mood ? ' · ' + esc(r.mood) : '';
         var tags = (r.tags || []).length ? ' · ' + esc(r.tags.join(', ')) : '';
         html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px;">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" onclick="viewDarkroom(\'' + r.room_id + '\')">' +
             '<div style="font-size:14px;font-weight:500;color:var(--text);">' + lockIcon + ' 房间 ' + r.room_id.substring(0, 8) + '</div>' +
-            '<div style="font-size:11px;color:var(--text-dim);">' + (r.created || '').substring(0, 10) + ' · ' + r.notes_count + '条笔记</div>' +
+            '<div style="font-size:11px;color:var(--text-dim);">' + fmtTokyo(r.created) + ' · ' + r.notes_count + '条笔记</div>' +
           '</div>' +
           '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;">' +
             '<div style="font-size:12px;color:var(--text-dim);">' + lockText + mood + tags + '</div>' +
@@ -1962,7 +1964,7 @@ function viewDarkroom(roomId) {
       if ((data.tags || []).length) html += '<div style="font-size:13px;color:var(--text-dim);margin-bottom:12px;">标签: ' + data.tags.join(', ') + '</div>';
       (data.notes || []).forEach(function(n) {
         html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px;">' +
-          '<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">' + (n.created || '').substring(0, 16) + '</div>' +
+          '<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;">' + fmtTokyo(n.created, true) + '</div>' +
           '<div style="font-size:14px;color:var(--text);line-height:1.7;white-space:pre-wrap;">' + esc(n.content || '') + '</div>' +
         '</div>';
       });
@@ -2049,7 +2051,7 @@ function renderSelfknow() {
     var aspect = '';
     (b.tags || []).forEach(function(t) { if (t.indexOf('aspect:') === 0) aspect = t.substring(7); });
     var aspectLabel = aspect ? (aspects[aspect] || aspect) : '';
-    var date = b.created ? b.created.substring(0, 10) : '';
+    var date = b.created ? fmtTokyo(b.created) : '';
     var badge = aspectLabel ? '<span style="display:inline-block;background:var(--accent);color:#fff;font-size:11px;padding:2px 8px;border-radius:10px;margin-right:8px;">' + esc(aspectLabel) + '</span>' : '';
     html += '<div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:10px;cursor:pointer;" onclick="showDetail(\'' + b.id + '\')">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
@@ -2072,7 +2074,7 @@ function renderAnchors() {
   items.sort(function(a, b) { return (b.importance || 5) - (a.importance || 5); });
   var html = '<div style="margin-bottom:12px;color:var(--text-dim);font-size:13px;">共 ' + items.length + '/24 个坐标系桶</div>';
   items.forEach(function(b) {
-    var date = b.created ? b.created.substring(0, 10) : '';
+    var date = b.created ? fmtTokyo(b.created) : '';
     var domains = (b.domain || []).join(', ') || '未分类';
     html += '<div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:10px;padding:16px;margin-bottom:10px;cursor:pointer;" onclick="showDetail(\'' + b.id + '\')">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">' +
@@ -2357,6 +2359,52 @@ async function searchBuckets(query) {
 
 var _currentDetail = null; // Cache for current detail panel data
 
+// --- Year rings (comments) rendering for detail panel ---
+// --- 年轮评注：详情页渲染 ---
+function mdLite(s) {
+  // escape first, then light markdown: **bold**, newlines, "- " bullets
+  var h = esc(s || '');
+  h = h.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
+  h = h.split('\n').map(function(line) {
+    return /^\s*-\s+/.test(line) ? line.replace(/^\s*-\s+/, '• ') : line;
+  }).join('<br>');
+  return h;
+}
+
+function buildRings(meta, bucketId) {
+  var comments = (meta && meta.comments) || [];
+  if (!comments.length) return '';
+  var items = comments.map(function(c) {
+    if (!c || typeof c !== 'object') return '';
+    var t = fmtTokyo(c.created, true);
+    var kind = c.kind === 'feel' ? '🫧 feel' : '💬 comment';
+    var author = c.author || '';
+    return '<div style="padding:10px 12px;margin-bottom:8px;background:var(--bg);border-left:3px solid var(--accent);border-radius:6px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--text-dim);margin-bottom:6px;">' +
+        '<span>' + t + ' · ' + kind + ' · ' + esc(author) + '</span>' +
+        '<span style="cursor:pointer;color:var(--negative);" onclick="ringDelete(\'' + bucketId + '\',\'' + (c.id || '') + '\')">🗑</span>' +
+      '</div>' +
+      '<div style="font-size:13px;line-height:1.7;color:var(--text);">' + mdLite(c.content) + '</div>' +
+    '</div>';
+  }).join('');
+  return '<details style="margin-top:14px;">' +
+    '<summary style="cursor:pointer;font-size:14px;font-weight:600;color:var(--text);padding:8px 0;">🪵 年轮（' + comments.length + '条）</summary>' +
+    '<div style="margin-top:8px;">' + items + '</div>' +
+  '</details>';
+}
+
+function ringDelete(bucketId, commentId) {
+  if (!commentId) { alert('该年轮缺少ID'); return; }
+  if (!confirm('确定删除这条年轮评注？')) return;
+  authFetch(BASE + '/api/bucket/comment/delete', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({bucket_id: bucketId, comment_id: commentId})
+  }).then(function(r) {
+    if (r && r.ok) showDetail(bucketId); else alert('删除失败');
+  }).catch(function(e) { alert('错误: ' + e.message); });
+}
+
 async function showDetail(id) {
   var panel = document.getElementById('detail-panel');
   var content = document.getElementById('detail-content');
@@ -2403,10 +2451,11 @@ async function showDetail(id) {
           }
           return '<div style="width:220px;font-size:13px;">' + esc(title) + ': ' + esc(path) + descHtml + '</div>';
         }).join('') + '</div></div>' : '') +
-        '<div class="field"><label>创建</label>' + (meta.created || '—') + '</div>' +
-        '<div class="field"><label>最后活跃</label>' + (meta.last_active || '—') + '</div>' +
+        '<div class="field"><label>创建</label>' + (fmtTokyo(meta.created, true) || '—') + '</div>' +
+        '<div class="field"><label>最后活跃</label>' + (fmtTokyo(meta.last_active, true) || '—') + '</div>' +
       '</div>' +
       '<div class="detail-content">' + esc(b.content) + '</div>' +
+      buildRings(meta, id) +
       '<div class="detail-actions">' +
         '<button onclick="openEdit(\'' + id + '\')">✏️ 编辑</button>' +
         '<button onclick="uploadMedia(\'' + id + '\')">🖼 上传图片</button>' +
@@ -2588,7 +2637,7 @@ function loadNetwork() {
     if (b.pinned) t = 'permanent';
     typeCount[t] = (typeCount[t] || 0) + 1;
     (b.domain || []).forEach(function(d) { domainCount[d] = (domainCount[d] || 0) + 1; });
-    var m = (b.created || '').substring(0, 7);
+    var m = fmtTokyo(b.created).substring(0, 7);
     if (m) monthCount[m] = (monthCount[m] || 0) + 1;
   });
 
@@ -2660,9 +2709,27 @@ function esc(s) {
   return d.innerHTML;
 }
 
+// --- Tokyo time helpers: server stores naive UTC; display in Asia/Tokyo ---
+// --- 时间统一：服务端存的是无时区UTC，网页显示一律转东京时间 ---
+function parseUTC(iso) {
+  if (!iso) return null;
+  var s = String(iso).replace(/(\.\d{3})\d+/, '$1'); // trim microseconds
+  var hasTZ = /Z$|[+-]\d{2}:\d{2}$/.test(s);
+  var d = new Date(hasTZ ? s : s + 'Z');
+  return isNaN(d) ? null : d;
+}
+function fmtTokyo(iso, withTime) {
+  var d = parseUTC(iso);
+  if (!d) return iso ? String(iso).substring(0, withTime ? 16 : 10) : '';
+  var opt = { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' };
+  if (withTime) { opt.hour = '2-digit'; opt.minute = '2-digit'; opt.hour12 = false; }
+  return new Intl.DateTimeFormat('sv-SE', opt).format(d);
+}
+
 function formatTimeAgo(iso) {
   if (!iso) return '—';
-  var d = new Date(iso);
+  var d = parseUTC(iso);
+  if (!d) return '—';
   var now = new Date();
   var hours = Math.floor((now - d) / 3600000);
   if (hours < 1) return '刚刚';
