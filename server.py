@@ -437,6 +437,46 @@ async def dream_hook(request):
 # Shared by hold and grow to avoid duplicate logic
 # hold 和 grow 共用，避免重复逻辑
 # =============================================================
+from zoneinfo import ZoneInfo
+_TZ_TOKYO = ZoneInfo("Asia/Tokyo")
+_TZ_UTC = ZoneInfo("UTC")
+
+def _fmt_tokyo(iso, with_time: bool = False) -> str:
+    """
+    UTC iso (naive or with tz) -> Tokyo display string. Convert ONCE.
+    与前端 fmtTokyo 同规则：识别时区后缀防双重偏移，脏数据原样兜底。
+    """
+    if not iso:
+        return ""
+    s = str(iso)
+    try:
+        d = datetime.fromisoformat(s)
+    except (ValueError, TypeError):
+        return s[:16 if with_time else 10]
+    if d.tzinfo is None:
+        d = d.replace(tzinfo=_TZ_UTC)
+    d = d.astimezone(_TZ_TOKYO)
+    return d.strftime("%Y-%m-%d %H:%M" if with_time else "%Y-%m-%d")
+
+def _tokyo_input_to_utc(s: str, end_of_day: bool = False) -> str:
+    """
+    Tokyo-context date input -> naive UTC iso for comparing stored 'created'.
+    入口对偶："2026-08-14" -> "2026-08-13T15:00:00"(日始) / "2026-08-14T14:59:59"(end_of_day)
+    """
+    s = (s or "").strip()
+    if not s:
+        return ""
+    try:
+        d = datetime.fromisoformat(s)
+    except (ValueError, TypeError):
+        return s
+    if d.tzinfo is None:
+        if len(s) == 10 and end_of_day:
+            d = d.replace(hour=23, minute=59, second=59)
+        d = d.replace(tzinfo=_TZ_TOKYO)
+    return d.astimezone(_TZ_UTC).replace(tzinfo=None).isoformat()
+
+
 def _letter_lock_info(meta: dict) -> str:
     """
     If this bucket is a time-locked letter still sealed, return its unlock_at; else ''.
@@ -580,7 +620,7 @@ async def breath_advanced(
     before: str = "",
     catalog: bool = False,
 ) -> str:
-    """breath的完整参数版,给需要精细控制的场景用(日常用breath()/breath_search()就够了)。不传query=返回权重最高的未解决记忆;传query=融合关键词+语义检索。catalog=True=目录模式:只返回每桶一行元数据(0次LLM调用,最省token),适合开新对话先看目录再breath_search(query=...)精准拉取。max_tokens=单次返回总token上限(默认10000)。domain逗号分隔,event_type按事件类型过滤(如:情感/技术/里程碑),valence/arousal 0~1(-1忽略)。max_results=返回条数上限(默认20,最大50)。importance_min>=1=按重要度降序返回最多20条。after/before按创建时间过滤(ISO格式)。"""
+    """breath的完整参数版,给需要精细控制的场景用(日常用breath()/breath_search()就够了)。不传query=返回权重最高的未解决记忆;传query=融合关键词+语义检索。catalog=True=目录模式:只返回每桶一行元数据(0次LLM调用,最省token),适合开新对话先看目录再breath_search(query=...)精准拉取。max_tokens=单次返回总token上限(默认10000)。domain逗号分隔,event_type按事件类型过滤(如:情感/技术/里程碑),valence/arousal 0~1(-1忽略)。max_results=返回条数上限(默认20,最大50)。importance_min>=1=按重要度降序返回最多20条。after/before按创建时间过滤(按东京时间理解，如"2026-08-14"；系统自动换算UTC比较)。"""
     return await _breath_dispatch(
         query=query, max_tokens=max_tokens, domain=domain,
         event_type=event_type, valence=valence, arousal=arousal,
@@ -677,8 +717,8 @@ async def _breath_dispatch(
 
     # --- Time range filter helper ---
     # --- 时间范围过滤 ---
-    _after = after.strip() if after else ""
-    _before = before.strip() if before else ""
+    _after = _tokyo_input_to_utc(after)
+    _before = _tokyo_input_to_utc(before, end_of_day=True)
 
     def _in_time_range(bucket):
         if not _after and not _before:
@@ -924,7 +964,7 @@ async def _breath_dispatch(
             if locked_until:
                 results.append(
                     f"🔒 [bucket_id:{bucket['id']}] {bucket['metadata'].get('name', '一封信')}"
-                    f"（时间锁：{locked_until[:16]} 后可拆）"
+                    f"（时间锁：{_fmt_tokyo(locked_until, True)} 后可拆）"
                 )
                 continue
             clean_meta = {k: v for k, v in bucket["metadata"].items() if k != "tags"}
@@ -1003,7 +1043,7 @@ async def _breath_dispatch(
             i_lines = []
             for b in i_buckets[:3]:
                 meta = b["metadata"]
-                ts = meta.get("created", "")[:10]
+                ts = _fmt_tokyo(meta.get("created", ""))
                 tags = meta.get("tags", [])
                 aspect_tag = next(
                     (t.replace("aspect:", "") for t in tags if t.startswith("aspect:")),
@@ -1039,7 +1079,7 @@ async def _breath_dispatch(
                 for ab in archive_hits[:3]:
                     ab_meta = ab.get("metadata", {})
                     ab_name = ab_meta.get("name", ab["id"][:12])
-                    ab_created = ab_meta.get("created", "")[:10]
+                    ab_created = _fmt_tokyo(ab_meta.get("created", ""))
                     archive_lines.append(
                         f"📦 {ab_name} [{ab_created}] [bucket_id:{ab['id']}]"
                     )
@@ -1076,7 +1116,7 @@ async def _breath_dispatch(
                 feel_lines = []
                 for tf in triggered_feels[:3]:
                     tf_meta = tf.get("metadata", {})
-                    tf_created = tf_meta.get("created", "")[:10]
+                    tf_created = _fmt_tokyo(tf_meta.get("created", ""))
                     tf_excerpt = strip_wikilinks(tf.get("content", ""))[:200]
                     feel_lines.append(f"🫧 [{tf_created}] {tf_excerpt}")
                 final_text += "\n\n=== 相关感受 ===\n" + "\n\n".join(feel_lines)
@@ -1097,7 +1137,7 @@ async def reminder_create(
     content: str = "",
     due_at: str = "",
 ) -> str:
-    """创建独立照顾备忘。不进记忆桶、不触发embedding。due_at可选截止时间(ISO格式或自然语言如"明天""下周一")。"""
+    """创建独立照顾备忘。不进记忆桶、不触发embedding。due_at可选截止时间(备注性文字，原样保存不做日期解析，如"明天""2026-12-25")。"""
     if not title or not title.strip():
         return "标题不能为空。"
     entry = reminder_store.create(title=title, content=content, due_at=due_at)
@@ -1177,7 +1217,7 @@ async def darkroom_enter(
     parts.append(f"房间: {result['room_id']}")
     parts.append(f"笔记数: {result['notes_count']}")
     if result.get("locked"):
-        parts.append(f"锁门至: {result['unlock_at']}")
+        parts.append(f"锁门至: {_fmt_tokyo(result['unlock_at'], True)}")
     else:
         parts.append("未锁门（随时可查看）")
     return "\n".join(parts)
@@ -1200,9 +1240,9 @@ async def darkroom_view(
             return "暗房空空如也。"
         lines = ["=== 暗房门牌 🌑 ==="]
         for r in rooms:
-            lock_status = f"🔒 至 {r['unlock_at']}" if r.get("locked") else "🔓"
+            lock_status = f"🔒 至 {_fmt_tokyo(r['unlock_at'], True)}" if r.get("locked") else "🔓"
             mood = f" | {r['mood']}" if r.get("mood") else ""
-            lines.append(f"[{r['room_id']}] {r['created'][:10]} | {r['notes_count']}条笔记 | {lock_status}{mood}")
+            lines.append(f"[{r['room_id']}] {_fmt_tokyo(r['created'])} | {r['notes_count']}条笔记 | {lock_status}{mood}")
         return "\n".join(lines)
 
     result = darkroom_store.view(room_id)
@@ -1218,7 +1258,7 @@ async def darkroom_view(
         lines.append(f"标签: {', '.join(result['tags'])}")
     lines.append("")
     for n in result.get("notes", []):
-        lines.append(f"[{n.get('created', '')[:16]}]")
+        lines.append(f"[{_fmt_tokyo(n.get('created', ''), True)}]")
         lines.append(n.get("content", ""))
         lines.append("")
     return "\n".join(lines)
@@ -1295,8 +1335,8 @@ async def read_bucket(bucket_id: str) -> str:
         return (
             f"🔒 {meta.get('name', '一封信')}\n"
             f"这是一封带时间锁的信，还没到拆信时间。\n"
-            f"写于：{meta.get('created', '')[:10]}\n"
-            f"解锁：{locked_until[:16]}"
+            f"写于：{_fmt_tokyo(meta.get('created', ''))}\n"
+            f"解锁：{_fmt_tokyo(locked_until, True)}"
         )
     parts = [f"=== 记忆桶 {bucket_id} ==="]
     parts.append(f"名称: {meta.get('name', '未命名')}")
@@ -1306,8 +1346,8 @@ async def read_bucket(bucket_id: str) -> str:
     parts.append(f"重要度: {meta.get('importance', 5)}")
     if meta.get("valence") is not None:
         parts.append(f"效价: {meta.get('valence')} / 唤醒度: {meta.get('arousal')}")
-    parts.append(f"创建: {meta.get('created', '')}")
-    parts.append(f"最近活跃: {meta.get('last_active', '')}")
+    parts.append(f"创建: {_fmt_tokyo(meta.get('created', ''), True)}")
+    parts.append(f"最近活跃: {_fmt_tokyo(meta.get('last_active', ''), True)}")
     parts.append(f"已解决: {meta.get('resolved', False)}")
     parts.append(f"钉选: {meta.get('pinned', False)}")
     if meta.get("anchor"):
@@ -1327,7 +1367,7 @@ async def read_bucket(bucket_id: str) -> str:
         parts.append(f"\n--- 年轮评注 ({len(comments)} 条) ---")
         for c in comments:
             if isinstance(c, dict):
-                c_time = c.get("created", "")[:10]
+                c_time = _fmt_tokyo(c.get("created", ""))
                 c_author = c.get("author", "")
                 c_kind = c.get("kind", "comment")
                 c_id = c.get("id", "")
@@ -1410,6 +1450,35 @@ async def delete_bucket_comment(
     if status == "forbidden":
         return "只能删除cloudy自己写的年轮评注。"
     return f"删除失败: {status}"
+
+
+# =============================================================
+# Tool: edit_bucket_comment — Edit a year ring
+# 工具：edit_bucket_comment — 编辑年轮评注
+# =============================================================
+@mcp.tool()
+async def edit_bucket_comment(
+    bucket_id: str,
+    comment_id: str,
+    content: str,
+) -> str:
+    """编辑指定年轮评注的内容（整条替换）；只能编辑cloudy写的。先用read_bucket看comment_id和原文。"""
+    if not bucket_id or not bucket_id.strip():
+        return "请提供有效的 bucket_id。"
+    if not comment_id or not comment_id.strip():
+        return "请提供有效的 comment_id。"
+    if not content or not content.strip():
+        return "新内容不能为空。"
+
+    result = await bucket_mgr.edit_comment(bucket_id, comment_id, content.strip())
+    status = result.get("status", "")
+    if status == "edited":
+        return f"已更新年轮评注 {comment_id}。"
+    if status == "not_found":
+        return f"未找到评注 {comment_id}，请用 read_bucket 确认。"
+    if status == "forbidden":
+        return "只能编辑cloudy自己写的年轮评注。"
+    return f"编辑失败: {status}"
 
 
 # =============================================================
@@ -2256,7 +2325,7 @@ async def letter_write(
         pass
 
     await _fire_webhook("letter_write", {"to": to, "title": letter_title, "bucket_id": bucket_id})
-    lock_line = f"\n🔒 时间锁：{unlock_at[:16]} 后可拆" if unlock_at else ""
+    lock_line = f"\n🔒 时间锁：{_fmt_tokyo(unlock_at, True)} 后可拆" if unlock_at else ""
     return (
         f"✉️ 信已写好并永久保存。\n"
         f"收件人：{to}\n"
@@ -2328,15 +2397,15 @@ async def letter_read(
         if locked_until:
             parts.append(
                 f"🔒 {meta.get('name', b['id'])}\n"
-                f"致：{to_tag} | 写于：{meta.get('created', '')[: 10]}\n"
+                f"致：{to_tag} | 写于：{_fmt_tokyo(meta.get('created', ''))}\n"
                 f"ID: {b['id']}\n"
                 f"---\n"
-                f"（这封信还锁着，{locked_until[:16]} 后可拆）"
+                f"（这封信还锁着，{_fmt_tokyo(locked_until, True)} 后可拆）"
             )
             continue
         parts.append(
             f"✉️ {meta.get('name', b['id'])}\n"
-            f"致：{to_tag} | 日期：{meta.get('created', '')[: 10]}\n"
+            f"致：{to_tag} | 日期：{_fmt_tokyo(meta.get('created', ''))}\n"
             f"ID: {b['id']}\n"
             f"---\n"
             f"{strip_wikilinks(b['content'])}"
@@ -2448,7 +2517,7 @@ async def I(
                 (t.replace("aspect:", "") for t in tags if t.startswith("aspect:")),
                 "",
             )
-            ts = meta.get("created", "")[:10]
+            ts = _fmt_tokyo(meta.get("created", ""))
             aspect_label = f" [{aspect_tag}]" if aspect_tag else ""
             text = strip_wikilinks(b["content"]).strip()
             lines.append(f"\n🪞 {ts}{aspect_label} ({b['id']})\n{text}")
@@ -3778,6 +3847,28 @@ async def api_bucket_comment_delete(request):
         result = await bucket_mgr.delete_comment(bucket_id, comment_id)
         status = result.get("status", "")
         if status == "deleted":
+            return JSONResponse({"ok": True, "comment_id": comment_id})
+        return JSONResponse({"error": status}, status_code=404 if status == "not_found" else 403)
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@mcp.custom_route("/api/bucket/comment/edit", methods=["POST"])
+async def api_bucket_comment_edit(request):
+    """Edit a year-ring comment via dashboard (owner's key path)."""
+    from starlette.responses import JSONResponse
+    err = _require_auth(request)
+    if err: return err
+    try:
+        body = await request.json()
+        bucket_id = body.get("bucket_id", "")
+        comment_id = body.get("comment_id", "")
+        content = body.get("content", "")
+        if not bucket_id or not comment_id or not str(content).strip():
+            return JSONResponse({"error": "missing bucket_id/comment_id/content"}, status_code=400)
+        result = await bucket_mgr.edit_comment(bucket_id, comment_id, str(content))
+        status = result.get("status", "")
+        if status == "edited":
             return JSONResponse({"ok": True, "comment_id": comment_id})
         return JSONResponse({"error": status}, status_code=404 if status == "not_found" else 403)
     except Exception as e:
