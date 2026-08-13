@@ -1231,3 +1231,48 @@ class BucketManager:
             return {"status": "write_failed"}
 
         return {"status": "deleted", "comment_id": comment_id}
+
+    async def edit_comment(
+        self,
+        bucket_id: str,
+        comment_id: str,
+        content: str,
+        allowed_author: str = "cloudy",
+    ) -> dict:
+        """
+        Edit a comment's content in place; only comments by allowed_author.
+        编辑年轮内容；只能编辑自己写的。记录edited_at但不改created。
+        """
+        if not content or not str(content).strip():
+            return {"status": "empty_content"}
+        file_path = self._find_bucket_file(bucket_id)
+        if not file_path:
+            return {"status": "not_found"}
+        try:
+            post = frontmatter.load(file_path)
+        except Exception:
+            return {"status": "read_failed"}
+
+        comments = post.get("comments", [])
+        if not isinstance(comments, list):
+            return {"status": "not_found"}
+        target = None
+        for c in comments:
+            if isinstance(c, dict) and c.get("id") == comment_id:
+                target = c
+                break
+        if target is None:
+            return {"status": "not_found"}
+        if target.get("author") != allowed_author:
+            return {"status": "forbidden"}
+
+        target["content"] = str(content).strip()
+        target["edited_at"] = now_iso()
+        post["comments"] = comments
+        post["updated_at"] = now_iso()
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(frontmatter.dumps(post))
+        except OSError:
+            return {"status": "write_failed"}
+        return {"status": "edited", "comment_id": comment_id}
