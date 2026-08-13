@@ -2371,18 +2371,24 @@ function mdLite(s) {
   return h;
 }
 
+var _ringCache = {};
 function buildRings(meta, bucketId) {
   var comments = (meta && meta.comments) || [];
   if (!comments.length) return '';
   var items = comments.map(function(c) {
     if (!c || typeof c !== 'object') return '';
+    _ringCache[c.id || ''] = c;
     var t = fmtTokyo(c.created, true);
     var kind = c.kind === 'feel' ? '🫧 feel' : '💬 comment';
     var author = c.author || '';
+    var edited = c.edited_at ? ' · 已编辑' : '';
     return '<div style="padding:10px 12px;margin-bottom:8px;background:var(--bg);border-left:3px solid var(--accent);border-radius:6px;">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--text-dim);margin-bottom:6px;">' +
-        '<span>' + t + ' · ' + kind + ' · ' + esc(author) + '</span>' +
-        '<span style="cursor:pointer;color:var(--negative);" onclick="ringDelete(\'' + bucketId + '\',\'' + (c.id || '') + '\')">🗑</span>' +
+        '<span>' + t + ' · ' + kind + ' · ' + esc(author) + edited + '</span>' +
+        '<span>' +
+          '<span style="cursor:pointer;color:var(--accent);margin-right:10px;" onclick="ringEdit(\'' + bucketId + '\',\'' + (c.id || '') + '\')">✏️</span>' +
+          '<span style="cursor:pointer;color:var(--negative);" onclick="ringDelete(\'' + bucketId + '\',\'' + (c.id || '') + '\')">🗑</span>' +
+        '</span>' +
       '</div>' +
       '<div style="font-size:13px;line-height:1.7;color:var(--text);">' + mdLite(c.content) + '</div>' +
     '</div>';
@@ -2391,6 +2397,20 @@ function buildRings(meta, bucketId) {
     '<summary style="cursor:pointer;font-size:14px;font-weight:600;color:var(--text);padding:8px 0;">🪵 年轮（' + comments.length + '条）</summary>' +
     '<div style="margin-top:8px;">' + items + '</div>' +
   '</details>';
+}
+
+function ringEdit(bucketId, commentId) {
+  var c = _ringCache[commentId];
+  if (!c) { alert('数据已过期，请重新打开详情'); return; }
+  var next = prompt('编辑年轮内容：', c.content || '');
+  if (next === null || !next.trim()) return;
+  authFetch(BASE + '/api/bucket/comment/edit', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({bucket_id: bucketId, comment_id: commentId, content: next.trim()})
+  }).then(function(r) {
+    if (r && r.ok) showDetail(bucketId); else alert('编辑失败');
+  }).catch(function(e) { alert('错误: ' + e.message); });
 }
 
 function ringDelete(bucketId, commentId) {
